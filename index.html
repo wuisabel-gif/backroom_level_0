@@ -1,0 +1,2034 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>THE BACKROOMS — Level 0</title>
+    <!-- Stop mobile browsers from pinch-zooming the canvas -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <style>
+        /* Display font for the end screens */
+        @font-face {
+            font-family: 'AmericanHorror';
+            src: url('fonts/AmericanHorrorStory.otf') format('opentype');
+            font-display: swap;
+        }
+        /* --- Look & feel --- */
+        body { margin: 0; overflow: hidden; background-color: #000; color: white; font-family: 'Courier New', Courier, monospace; user-select: none; -webkit-user-select: none; }
+
+        /* UI layer: a transparent sheet stacked on top of the 3D canvas */
+        #ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; display: flex; flex-direction: column; justify-content: space-between; z-index: 10; }
+        #info { padding: 20px; text-shadow: 1px 1px 2px black; font-size: 14px; color: #ddd; }
+
+        /* Crosshair (center reticle) */
+        #crosshair {
+            position: absolute; top: 50%; left: 50%;
+            width: 80px; height: 80px;
+            border: 2px solid rgba(200, 50, 50, 0.5);
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            display: none; /* hidden until the run begins */
+            box-shadow: 0 0 5px red;
+            transition: all 0.2s ease-out;
+        }
+        /* Center dot */
+        #crosshair::after {
+            content: ''; position: absolute; top: 50%; left: 50%;
+            width: 2px; height: 2px; background: red;
+            transform: translate(-50%, -50%);
+        }
+        /* Aiming-down-sights reticle (right click) */
+        #crosshair.aiming {
+            width: 16px; height: 16px;
+            border-color: rgba(50, 255, 50, 0.8);
+            background-color: rgba(50, 255, 50, 0.3);
+            box-shadow: 0 0 5px lime;
+        }
+        /* Shotgun spread reticle */
+        #crosshair.shotgun {
+            width: 320px; height: 320px;
+            border-style: dashed;
+        }
+        #crosshair.shotgun.aiming {
+            width: 75px; height: 75px;
+        }
+
+        /* Tiny ammo gauge beside the reticle */
+        #reticle-ammo {
+            position: absolute;
+            top: 50%; left: 50%;
+            transform: translate(25px, -50%);
+            display: flex;
+            flex-wrap: wrap;
+            width: 120px;
+            gap: 3px;
+            align-items: center;
+            pointer-events: none;
+        }
+
+        /* Single ammo pip */
+        .ammo-pip {
+            background-color: rgba(255, 255, 255, 0.9);
+            box-shadow: 0 0 2px black;
+            transition: opacity 0.1s;
+        }
+        /* Spent pip */
+        .ammo-pip.empty {
+            background-color: transparent;
+            border: 1px solid rgba(100, 100, 100, 0.5);
+            opacity: 0.3;
+        }
+
+        /* Main menu screen */
+        #menu-screen {
+            position: absolute; width: 100%; height: 100%;
+            background-color: rgba(10, 5, 5, 0.85);
+            backdrop-filter: blur(5px);
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            z-index: 999; pointer-events: auto;
+            text-align: center;
+            transition: opacity 0.3s;
+            overflow-y: auto;
+            padding: 20px 0;
+            font-family: 'AmericanHorror', 'Impact', 'Arial Black', sans-serif;
+        }
+        /* Keep the keyboard keycaps monospaced for legibility */
+        #menu-screen .key { font-family: 'Courier New', monospace; }
+
+        h1 { font-size: 50px; color: #c9b037; text-shadow: 4px 4px 0px #000, 0 0 20px #6b5a00; letter-spacing: 5px; margin-bottom: 6px; border-bottom: 2px solid #5a4a00; padding-bottom: 10px; }
+        .subtitle { color: #888; letter-spacing: 4px; font-size: 13px; margin-bottom: 18px; }
+        .menu-intro { color: #b8a85a; font-size: 14px; line-height: 1.8; max-width: 460px; margin-bottom: 6px; }
+        .menu-intro .key { font-size: 12px; }
+
+        /* Buttons */
+        .view-select-container { margin-bottom: 15px; width: 90%; max-width: 800px; }
+        .view-label { font-size: 16px; color: #aaa; margin-bottom: 8px; letter-spacing: 2px; text-shadow: 1px 1px 0 #000; }
+        .view-buttons { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+
+        .btn-view { background: rgba(0,0,0,0.7); border: 1px solid #444; color: #888; padding: 8px 16px; cursor: pointer; font-family: inherit; font-size: 14px; transition: all 0.2s; }
+        .btn-view:hover { border-color: #800; color: #fff; }
+        .btn-view.active { background-color: #6b5a00; color: #fff; border-color: #c9b037; box-shadow: 0 0 10px #4a3d00; font-weight: bold; }
+
+        .action-buttons { display: flex; flex-direction: column; gap: 8px; min-width: 300px; margin-top: 15px; align-items: center; }
+        .btn-main { font-size: 24px; padding: 12px 40px; background-color: rgba(0,0,0,0.5); border: 2px solid #c9b037; color: #c9b037; cursor: pointer; font-family: inherit; text-transform: uppercase; letter-spacing: 3px; transition: all 0.2s; width: 100%; margin-top: 10px; }
+        .btn-main:hover { background-color: #c9b037; color: #000; box-shadow: 0 0 20px #c9b037; }
+        .pulse { animation: pulse 2s infinite; }
+        @keyframes pulse { 0% { text-shadow: 0 0 5px #c9b037; } 50% { text-shadow: 0 0 20px #ffe14d; } 100% { text-shadow: 0 0 5px #c9b037; } }
+        .hidden { display: none !important; }
+
+        .btn-option {
+            width: 100%; text-align: center; border-color: #555; color: #ccc; font-size: 14px; padding: 5px;
+        }
+
+        /* Enemy select grid (3 columns) */
+        .enemy-buttons-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+            width: 100%;
+        }
+        .enemy-buttons-grid button {
+            font-size: 12px;
+            padding: 10px 5px;
+        }
+
+        /* Controls guide */
+        .controls-wrapper {
+            margin-top: 25px;
+            background: rgba(20, 20, 20, 0.8);
+            border: 1px solid #444;
+            padding: 15px;
+            border-radius: 5px;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            text-align: left;
+            max-width: 600px;
+            width: 90%;
+        }
+        .control-section h3 {
+            margin: 0 0 10px 0;
+            color: #c9b037;
+            font-size: 16px;
+            border-bottom: 1px solid #444;
+            padding-bottom: 3px;
+        }
+        .control-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 5px;
+            font-size: 13px;
+            color: #ccc;
+        }
+        .key {
+            color: #0ff;
+            font-weight: bold;
+            font-family: monospace;
+            background: rgba(0, 50, 50, 0.5);
+            padding: 0 4px;
+            border: 1px solid #066;
+            border-radius: 3px;
+        }
+
+        /* End screens (death + escape) */
+        #game-over-screen, #escape-screen {
+            display: none; /* toggled from JS */
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: linear-gradient(rgba(0,0,0,0.9), rgba(50,0,0,0.8));
+            flex-direction: column; align-items: center; justify-content: center;
+            z-index: 2000; pointer-events: auto;
+            font-family: 'AmericanHorror', 'Impact', 'Arial Black', sans-serif;
+            text-transform: uppercase;
+            animation: fadeIn 1s ease-in;
+        }
+        #escape-screen { background: linear-gradient(rgba(0,0,0,0.9), rgba(40,40,0,0.85)); }
+
+        .go-title {
+            font-size: 110px; color: #a00;
+            text-shadow: 0 0 30px #f00, 4px 4px 0 #000;
+            letter-spacing: 10px; margin-bottom: 20px;
+            animation: shake 0.5s;
+            text-align: center;
+        }
+        #escape-screen .go-title { color: #c9b037; text-shadow: 0 0 30px #ffe14d, 4px 4px 0 #000; }
+        @keyframes shake { 0% { transform: translate(1px, 1px) rotate(0deg); } 100% { transform: translate(-1px, -2px) rotate(-1deg); } }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+        .go-stats-container {
+            display: flex; gap: 60px;
+            margin-bottom: 30px;
+            border-top: 2px solid #555;
+            border-bottom: 2px solid #555;
+            padding: 20px 0;
+            background: rgba(0,0,0,0.5);
+            width: 80%; justify-content: center; flex-wrap: wrap;
+        }
+
+        .go-stat-box { text-align: center; }
+        .go-label { font-size: 20px; color: #aaa; letter-spacing: 2px; margin-bottom: 5px; }
+        .go-value { font-size: 50px; color: #fff; font-weight: bold; text-shadow: 2px 2px 0 #000; }
+        .go-calc { font-size: 14px; color: #888; margin-top: 5px; }
+
+        .go-total-score {
+            font-size: 80px; color: #FFD700;
+            text-shadow: 0 0 20px #FFD700, 3px 3px 0 #000;
+            margin-bottom: 50px;
+            animation: pulseScore 1.5s infinite alternate;
+        }
+        @keyframes pulseScore {
+            0% { transform: scale(1); text-shadow: 0 0 20px #FFD700; }
+            100% { transform: scale(1.05); text-shadow: 0 0 40px #FFD700; }
+        }
+
+        .btn-restart {
+            font-size: 30px; padding: 15px 60px;
+            background: transparent; border: 2px solid #fff; color: #fff;
+            cursor: pointer; font-family: inherit; transition: all 0.2s;
+        }
+        .btn-restart:hover { background: #fff; color: #000; box-shadow: 0 0 20px #fff; }
+
+        .btn-menu-back {
+            font-size: 20px; padding: 10px 40px; margin-top: 20px;
+            background: transparent; border: 1px solid #888; color: #aaa;
+            cursor: pointer; font-family: inherit; transition: all 0.2s;
+        }
+        .btn-menu-back:hover { border-color: #fff; color: #fff; background: rgba(255,255,255,0.1); }
+
+        #coord-info { display: none; position: absolute; top: 10px; left: 10px; color: white; font-family: monospace; font-size: 16px; background: rgba(0,0,0,0.5); padding: 5px; pointer-events: none; }
+        #hitbox-status { display: none; position: absolute; bottom: 140px; left: 10px; color: lime; font-family: monospace; font-size: 12px; pointer-events: none; }
+
+        /* Hotbar (weapon slots) */
+        #hotbar-container {
+            position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%);
+            display: flex; gap: 6px;
+            background-color: rgba(0, 0, 0, 0.4); padding: 6px; border-radius: 6px;
+            pointer-events: none;
+        }
+        .slot {
+            width: 75px; height: 75px;
+            border: 3px solid #888;
+            background-color: rgba(50, 50, 50, 0.6);
+            display: flex; align-items: center; justify-content: center;
+            font-size: 14px; color: white; font-weight: bold;
+            position: relative;
+        }
+        .slot.active {
+            border-color: white; background-color: rgba(100, 100, 100, 0.8);
+            transform: scale(1.1); box-shadow: 0 0 15px rgba(255,255,255,0.5);
+        }
+        .slot span { position: absolute; bottom: 4px; right: 6px; }
+        .slot-icon {
+            width: 60px; height: 60px; object-fit: contain;
+            pointer-events: none; filter: drop-shadow(2px 2px 2px black);
+        }
+        /* Text weapon labels (avoids the Japanese baked into the old icons) */
+        .slot-label {
+            font-size: 15px; font-weight: bold; color: #e8e0c0; letter-spacing: 1px;
+            text-shadow: 1px 1px 2px #000; pointer-events: none; text-align: center;
+        }
+
+        /* Ammo counter */
+        #ammo-display {
+            position: absolute; bottom: 30px; right: 30px;
+            font-size: 60px; font-weight: bold; color: #fff;
+            text-shadow: 3px 3px 0 #000;
+            font-family: Impact, Haettenschweiler, 'Arial Narrow Bold', sans-serif;
+            display: none;
+        }
+        #ammo-display span { font-size: 30px; color: #aaa; }
+        #ammo-display.reloading { color: #f55; animation: blink 0.2s infinite; }
+        @keyframes blink { 0% { opacity: 1; } 50% { opacity: 0.2; } 100% { opacity: 1; } }
+
+        /* Bottom-left stat block — stacked bars */
+        /* Sanity bar */
+        #sanity-ui {
+            position: absolute; bottom: 165px; left: 30px;
+            z-index: 20; font-family: Impact, sans-serif;
+            color: #c9b037; text-shadow: 2px 2px 0 #000;
+        }
+        #sanity-ui .label { font-size: 20px; letter-spacing: 2px; }
+        #sanity-bar-wrap { width: 200px; height: 14px; border: 2px solid #6b5a00; background: rgba(0,0,0,0.5); margin-top: 4px; }
+        #sanity-bar { height: 100%; width: 100%; background: linear-gradient(90deg,#c9b037,#ffe14d); transition: width 0.2s; }
+
+        /* Blood bar (how much you have left) */
+        #blood-ui {
+            position: absolute; bottom: 110px; left: 30px;
+            z-index: 20; font-family: Impact, sans-serif;
+            color: #f55; text-shadow: 2px 2px 0 #000;
+        }
+        #blood-ui .label { font-size: 20px; letter-spacing: 2px; }
+        #blood-ui .label span { color: #fff; }
+        #blood-bar-wrap { width: 200px; height: 14px; border: 2px solid #5a0000; background: rgba(0,0,0,0.5); margin-top: 4px; }
+        #blood-bar { height: 100%; width: 100%; background: linear-gradient(90deg,#7a0000,#ff4d4d); transition: width 0.2s; box-shadow: 0 0 8px rgba(180,0,0,0.6) inset; }
+
+        #inventory {
+            display: none; position: absolute; top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0,0,0,0.8); padding: 20px;
+            border: 1px solid #555; color: white; z-index: 999;
+            text-align: center;
+        }
+        #inventory h2 { margin-top: 0; color: #aaa; border-bottom: 1px solid #555; padding-bottom: 5px;}
+
+        /* Creative mode badge */
+        #creative-indicator {
+            display: none; position: absolute; top: 60px; right: 20px;
+            color: cyan; font-weight: bold; font-family: monospace;
+            text-shadow: 0 0 5px cyan;
+        }
+
+        /* Low-sanity red vignette overlay */
+        #sanity-vignette {
+            position: absolute; inset: 0; pointer-events: none; z-index: 15; opacity: 0;
+            box-shadow: inset 0 0 200px 60px rgba(120,0,0,0.9);
+            transition: opacity 0.4s;
+        }
+
+        /* "[E] Read M.E.G. Note" interaction prompt */
+        #interact-prompt {
+            display: none; position: absolute; top: 60%; left: 50%; transform: translateX(-50%);
+            background: rgba(0,0,0,0.7); border: 1px solid #c9b037; color: #ffe14d;
+            padding: 10px 20px; font-size: 18px; letter-spacing: 1px; z-index: 25;
+            pointer-events: none; text-shadow: 0 0 6px #6b5a00;
+        }
+        #interact-prompt .key { color: #ffe14d; }
+
+        /* M.E.G. terminal / quiz overlay */
+        #terminal-screen {
+            display: none; position: absolute; inset: 0; z-index: 1500;
+            background: rgba(8, 8, 2, 0.92); backdrop-filter: blur(3px);
+            flex-direction: column; align-items: center; justify-content: center;
+            pointer-events: auto; padding: 20px; box-sizing: border-box;
+        }
+        .term-card {
+            width: 90%; max-width: 640px;
+            background: rgba(20, 18, 6, 0.96);
+            border: 2px solid #c9b037; box-shadow: 0 0 30px rgba(201,176,55,0.3);
+            padding: 26px; color: #e8e0c0; font-family: 'Courier New', monospace;
+        }
+        .term-head { color: #c9b037; letter-spacing: 3px; font-size: 13px; border-bottom: 1px dashed #6b5a00; padding-bottom: 8px; margin-bottom: 16px; display: flex; justify-content: space-between; }
+        .term-q { font-size: 20px; line-height: 1.4; margin-bottom: 20px; color: #fff; }
+        .term-options { display: flex; flex-direction: column; gap: 10px; }
+        .term-opt {
+            text-align: left; background: rgba(0,0,0,0.5); border: 1px solid #555; color: #ddd;
+            padding: 12px 16px; cursor: pointer; font-family: inherit; font-size: 15px; transition: all 0.15s;
+        }
+        .term-opt:hover { border-color: #c9b037; color: #fff; background: rgba(60,50,0,0.5); }
+        .term-opt.correct { border-color: #4caf50; background: rgba(20,60,20,0.7); color: #cfc; }
+        .term-opt.wrong { border-color: #f44; background: rgba(60,20,20,0.7); color: #fcc; }
+        .term-opt:disabled { cursor: default; }
+        .term-result { margin-top: 18px; font-size: 14px; line-height: 1.5; min-height: 20px; }
+        .term-result .lore { color: #b8a85a; font-style: italic; }
+        .term-continue {
+            margin-top: 18px; width: 100%; padding: 12px; background: transparent;
+            border: 1px solid #c9b037; color: #c9b037; cursor: pointer; font-family: inherit;
+            font-size: 16px; letter-spacing: 2px; text-transform: uppercase; display: none;
+        }
+        .term-continue:hover { background: #c9b037; color: #000; }
+    </style>
+    <!-- Three.js and friends -->
+    <script async src="https://unpkg.com/es-module-shims@1.6.3/dist/es-module-shims.js"></script>
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.154.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.154.0/examples/jsm/"
+            }
+        }
+    </script>
+</head>
+<body>
+    <div id="creative-indicator">★ CREATIVE MODE</div>
+    <div id="sanity-vignette"></div>
+
+    <div id="inventory">
+        <h2>PAUSE MENU</h2>
+        <p>Options</p>
+        <button id="toggle-player" class="btn-view">👤 Toggle Player Model</button>
+        <p style="font-size:12px; margin-top:20px; color:#888;">Press F1 or Esc to Close</p>
+    </div>
+
+    <!-- Main menu -->
+    <div id="menu-screen">
+        <h1>THE BACKROOMS</h1>
+        <div class="subtitle">LEVEL 0</div>
+
+        <p class="menu-intro">
+            You noclipped out of reality. Read the glowing M.E.G. terminals
+            (<span class="key">E</span>) to hold your sanity together — log
+            <b id="needed-count">5</b> right answers and an exit appears.
+            Something is in here with you.
+        </p>
+
+        <div class="action-buttons">
+            <button id="btn-start" class="btn-main pulse">ENTER</button>
+            <button id="btn-resume" class="btn-main hidden">RESUME</button>
+            <button id="btn-reset" class="btn-main hidden">RESET RUN</button>
+        </div>
+
+        <!-- Controls guide -->
+        <div class="controls-wrapper">
+            <div class="control-section">
+                <h3>MOVEMENT</h3>
+                <div class="control-row"><span>Move</span><span class="key">WASD</span></div>
+                <div class="control-row"><span>Jump</span><span class="key">SPACE</span></div>
+                <div class="control-row"><span>Sprint</span><span class="key">CTRL</span></div>
+                <div class="control-row"><span>Read Note</span><span class="key">E</span></div>
+            </div>
+            <div class="control-section">
+                <h3>COMBAT</h3>
+                <div class="control-row"><span>Shoot</span><span class="key">L-CLICK</span></div>
+                <div class="control-row"><span>Reload</span><span class="key">R</span></div>
+                <div class="control-row"><span>Weapon</span><span class="key">1-5 / WHEEL</span></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Death screen -->
+    <div id="game-over-screen">
+        <div class="go-title">YOU DIED</div>
+        <div class="go-stats-container">
+            <div class="go-stat-box">
+                <div class="go-label">KILLS</div>
+                <div class="go-value" id="go-kills">0</div>
+                <div class="go-calc">x 5</div>
+            </div>
+            <div class="go-stat-box">
+                <div class="go-label">NOTES</div>
+                <div class="go-value" id="go-notes">0</div>
+                <div class="go-calc">x 10</div>
+            </div>
+            <div class="go-stat-box">
+                <div class="go-label">TIME</div>
+                <div class="go-value" id="go-time">0s</div>
+                <div class="go-calc">x 1</div>
+            </div>
+        </div>
+        <div class="go-label" style="font-size:24px; color:#fff;">TOTAL SCORE</div>
+        <div class="go-total-score" id="go-score">0</div>
+        <button id="btn-restart-go" class="btn-restart">TRY AGAIN</button>
+        <button id="btn-back-to-menu" class="btn-menu-back">BACK TO MENU</button>
+    </div>
+
+    <!-- Escape screen -->
+    <div id="escape-screen">
+        <div class="go-title">YOU ESCAPED</div>
+        <div class="go-stats-container">
+            <div class="go-stat-box">
+                <div class="go-label">KILLS</div>
+                <div class="go-value" id="esc-kills">0</div>
+            </div>
+            <div class="go-stat-box">
+                <div class="go-label">NOTES</div>
+                <div class="go-value" id="esc-notes">0</div>
+            </div>
+            <div class="go-stat-box">
+                <div class="go-label">TIME</div>
+                <div class="go-value" id="esc-time">0s</div>
+            </div>
+        </div>
+        <div class="go-label" style="font-size:24px; color:#fff;">TOTAL SCORE</div>
+        <div class="go-total-score" id="esc-score">0</div>
+        <button id="btn-restart-esc" class="btn-restart">RUN AGAIN</button>
+        <button id="btn-back-to-menu-esc" class="btn-menu-back">BACK TO MENU</button>
+    </div>
+
+    <!-- M.E.G. terminal quiz overlay -->
+    <div id="terminal-screen">
+        <div class="term-card">
+            <div class="term-head">
+                <span>// M.E.G. FIELD TERMINAL</span>
+                <span id="term-meta">DIFFICULTY: ?</span>
+            </div>
+            <div class="term-q" id="term-q">...</div>
+            <div class="term-options" id="term-options"></div>
+            <div class="term-result" id="term-result"></div>
+            <button class="term-continue" id="term-continue">CONTINUE</button>
+        </div>
+    </div>
+
+    <div id="coord-info">XYZ: 0.00 / 0.00 / 0.00</div>
+
+    <!-- HUD layer -->
+    <div id="ui-layer">
+        <div id="info" style="text-align: right; width: auto; right: 10px; left: auto;">
+            Status: <span id="status">Loading Models...</span><br>
+            Mode: <span id="view-mode-text">FPS</span><br>
+            Signal: <span id="signal-text" style="color:#c9b037;">0 / 5</span><br>
+            <span id="battle-log" style="color:red; font-weight:bold;"></span>
+        </div>
+        <div id="hitbox-status">[Hitboxes: ON]</div>
+        <div id="sanity-ui">
+            <div class="label">SANITY</div>
+            <div id="sanity-bar-wrap"><div id="sanity-bar"></div></div>
+        </div>
+        <div id="blood-ui">
+            <div class="label">BLOOD <span id="hp-text">100</span></div>
+            <div id="blood-bar-wrap"><div id="blood-bar"></div></div>
+        </div>
+        <div id="hotbar-container">
+            <div class="slot" id="slot-0"><div class="slot-img"><img src="photo/fist.png" class="slot-icon" alt="Fists"></div><span>1</span></div>
+            <div class="slot active" id="slot-1"><div class="slot-img"><img src="photo/M16.png" class="slot-icon" alt="M16"></div><span>2</span></div>
+            <div class="slot" id="slot-2"><div class="slot-img"><img src="photo/shotgun.png" class="slot-icon" alt="Shotgun"></div><span>3</span></div>
+            <div class="slot" id="slot-3"><div class="slot-img"><img src="photo/pistol.png" class="slot-icon" alt="Pistol"></div><span>4</span></div>
+            <div class="slot" id="slot-4"><div class="slot-img"><img src="photo/flashlight.png" class="slot-icon" alt="Flashlight"></div><span>5</span></div>
+        </div>
+        <div id="ammo-display">30 <span>/ 30</span></div>
+    </div>
+
+    <div id="crosshair"></div>
+    <div id="reticle-ammo"></div>
+    <div id="interact-prompt">[<span class="key">E</span>] READ M.E.G. NOTE</div>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+        import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
+
+        // --- Game settings ---
+        const WALK_SPEED = 0.08;      // walk speed
+        const STALK_SPEED = 0.055;      // chase speed
+        const LOOK_SENS = 0.002;
+        const ROOM_SIZE = 41.0;        // size of one map tile
+        const GRAV_ACCEL = 20.0;
+        const JUMP_VEL = 8.0;
+        const CROUCH_DROP = 0.8;
+        const MAX_HORDE = 10;
+        const NOTES_TO_ESCAPE = 5;      // correct answers needed to manifest the exit
+        const MONSTER_GRACE_MS = 30000; // grace period before the hunter appears (fallback)
+
+        // --- Global state ---
+        let playerHealth = 100;
+        let sanity = 100;               // drains over time; M.E.G. notes restore it
+        let killCount = 0;
+        let notesAnswered = 0;          // correct answers logged this run
+        let monsterSpawned = false;     // has the hunter appeared yet this run
+        let startTime = 0;
+        let soundEnabled = true;
+        let recoilEnabled = true;
+        let recoilBufferPitch = 0;
+        let recoilBufferYaw = 0;
+
+        let isPlayerVisible = true;
+        let isInventoryOpen = false;
+        let isCreativeMode = false;
+        let isQuizOpen = false;         // an M.E.G. terminal is being read
+
+        // Entity bookkeeping
+        const entityKinds = ['bacteria', 'nathan', 'rubeus', 'orcanos', 'donchan', 'skinstealer'];
+        let activeEntityKind = 'bacteria';
+        let entityProto = null;
+        const entityAssets = { bacteria: null, nathan: null, rubeus: null, orcanos: null, donchan: null, skinstealer: null };
+
+        // Viewpoint config (TPS/FPS)
+        let viewMode = 2; // 2 = FPS
+        const VIEW_CONFIG = [
+            { name: "TPS (Rear)",  dist: 1.9, height: 1.8, offsetAngle: Math.PI },
+            { name: "TPS (Front)", dist: 2.5, height: 1.8, offsetAngle: 0 },
+            { name: "FPS",         dist: 0.1, height: 1.7, offsetAngle: Math.PI }
+        ];
+
+        // Game mode
+        let gameMode = 1; // 0:Peaceful, 1:Normal, 2:Hardcore
+
+        let isGameActive = false;
+        let hasGameStarted = false;
+        let isGameOver = false;
+        let activeSlot = 1; // 1=M16, 2=Shotgun
+        const SLOT_COUNT = 5;
+
+        // --- Weapon data ---
+        const ARSENAL = {
+            1: {
+                name: "M16",
+                maxAmmo: 30,
+                scale: 0.0012,
+                rate: 100,      // ms between shots (lower = faster)
+                pellets: 1,
+                spreadHip: 0.08,
+                spreadAds: 0.001,
+                damage: 1,
+                recoil: 0.03,
+                tpsPos: new THREE.Vector3(0.08, -0.00, 0.40), tpsRot: new THREE.Euler(3.07, -2.50, 0.00),
+                fpsPosHip: new THREE.Vector3(0.25, -0.3, -0.6), fpsRotHip: new THREE.Euler(0, Math.PI + 0.05, 0),
+                fpsPosAds: new THREE.Vector3(0.0, -0.19, -0.5), fpsRotAds: new THREE.Euler(0, Math.PI, 0),
+                shootSound: 'sounds/pistol_fire.mp3'
+            },
+            2: {
+                name: "Shotgun",
+                maxAmmo: 5,
+                scale: 0.0012,
+                rate: 1000,
+                pellets: 8,
+                spreadHip: 0.15,
+                spreadAds: 0.05,
+                damage: 2,
+                recoil: 0.04,
+                tpsPos: new THREE.Vector3(0.08, -0.00, 0.40), tpsRot: new THREE.Euler(0, -2.50, Math.PI),
+                fpsPosHip: new THREE.Vector3(0.2, -0.3, -0.6), fpsRotHip: new THREE.Euler(Math.PI, Math.PI + 0.05, Math.PI),
+                fpsPosAds: new THREE.Vector3(0.0, -0.2, -0.5), fpsRotAds: new THREE.Euler(Math.PI, Math.PI, Math.PI),
+                shootSound: 'sounds/shotgun_fire.mp3'
+            },
+            3: {
+                name: "Pistol",
+                maxAmmo: 12,
+                rate: 220,      // semi-auto sidearm
+                pellets: 1,
+                spreadHip: 0.04,
+                spreadAds: 0.001,
+                damage: 1,
+                recoil: 0.02,
+                noModel: true,  // no held .glb asset — hitscan only
+                shootSound: 'sounds/pistol_fire.mp3'
+            }
+        };
+        const FLASHLIGHT_SLOT = 4; // slot 5 — a tool, not a gun
+
+        let magazines = { 1: 30, 2: 5, 3: 12 };
+        let playerVelocityY = 0;
+        let isGrounded = false;
+        let isReloading = false;
+        let isAiming = false;
+        let isTriggerHeld = false;
+        let lastShotTime = 0;
+        const raycaster = new THREE.Raycaster();
+
+        // ===================================================================
+        //  M.E.G. TRIVIA BANK
+        //  Backrooms lore drawn from the community wikis (CC BY-SA). Original wording.
+        //  answer = 0-based index into options.
+        // ===================================================================
+        const QUIZ_BANK = [
+            {"id":1,"category":"Origins","difficulty":"easy","q":"How does a person end up in the Backrooms in the first place?","options":["By falling asleep in an empty building","By \"noclipping\" out of reality","By staring at fluorescent lights too long","By getting lost in a parking garage"],"answer":1,"lore":"\"Noclipping\" is borrowed from video-game glitches — slipping through the solid walls of reality."},
+            {"id":2,"category":"Origins","difficulty":"easy","q":"What color is the wallpaper that defines the first and most iconic level?","options":["Beige","Grey","Mono-yellow","Off-white"],"answer":2,"lore":"The \"madness of mono-yellow\" is the most recognizable detail of the original post."},
+            {"id":3,"category":"Origins","difficulty":"easy","q":"What constant sound fills Level 0?","options":["Dripping water","The buzzing hum of fluorescent lights","Distant footsteps","Wind through vents"],"answer":1,"lore":"The hum is louder than normal and is said to cause migraines and hallucinations."},
+            {"id":4,"category":"Origins","difficulty":"medium","q":"The Backrooms began as what kind of internet post?","options":["A creepypasta on 4chan","A Reddit AMA","A YouTube documentary","A Wikipedia hoax"],"answer":0,"lore":"A single greentext post with one photo spawned the whole mythos."},
+            {"id":5,"category":"Level 0","difficulty":"medium","q":"Roughly how large is Level 0 said to be?","options":["A few city blocks","About 600 million square miles","Exactly one mile across","Infinite and unmeasurable"],"answer":1,"lore":"The original post pinned it at ~600 million square miles of empty rooms."},
+            {"id":6,"category":"Level 0","difficulty":"hard","q":"What is the \"Isolation Effect\" in Level 0?","options":["The walls absorb all sound","Two people who enter together can never find each other","You forget your own name after a day","Radios only pick up your own voice"],"answer":1,"lore":"Wanderers who step in side by side are separated and may never reunite."},
+            {"id":7,"category":"Level 0","difficulty":"medium","q":"Why should you NOT eat the carpet or drink the floor fluid in Level 0?","options":["It's glued down","It's tainted/contaminated and can make you sick","It's actually plastic","It triggers the entities"],"answer":1,"lore":"Samples include brackish water, formalin, and even DNA slurries."},
+            {"id":8,"category":"Level 0","difficulty":"medium","q":"What's the classic way to escape Level 0 toward Level 1?","options":["Find a flickering/discolored wall and throw yourself through it","Wait exactly 24 hours","Climb to the ceiling","Say the right password aloud"],"answer":0,"lore":"A glitched wall is a \"terminal\" — the boundary between levels."},
+            {"id":9,"category":"Level 0","difficulty":"hard","q":"What navigational hazard appears in close groups, in a grid, deep in Level 0?","options":["Locked doors","Pitch-black pits in the floor","Mirror rooms","Collapsing ceilings"],"answer":1,"lore":"Light can't penetrate them; they form in predictable grids."},
+            {"id":10,"category":"Levels","difficulty":"easy","q":"Level 1 is most often described as resembling what?","options":["A sunny beach","A warehouse / parking garage of concrete","A shopping mall","A hospital ward"],"answer":1,"lore":"Concrete, pipes, dim flickering lights — grittier than Level 0."},
+            {"id":11,"category":"Levels","difficulty":"medium","q":"What makes Level 1 more survivable long-term than Level 0?","options":["No entities at all","A consistent supply of water and electricity","Cell phone signal works there","It has a working exit sign"],"answer":1,"lore":"That stability is why many of the oldest human bases sit on Level 1."},
+            {"id":12,"category":"Levels","difficulty":"medium","q":"\"Level Fun =)\" is best described as…","options":["A genuinely safe playground level","A deadly party level run by the Partygoers","A level made entirely of mirrors","An arcade with no exits"],"answer":1,"lore":"It markets itself as \"the most fun level\" — which is the trap."},
+            {"id":13,"category":"Levels","difficulty":"medium","q":"The Poolrooms are known for what relief they offer wanderers?","options":["They fully restore your sanity","They contain free weapons","They have a working map","They never have entities ever"],"answer":0,"lore":"White tile, turquoise water, sunlight from nowhere."},
+            {"id":14,"category":"Levels","difficulty":"hard","q":"How are numbered levels said to get their numbers (Casper-Bray system)?","options":["By how dangerous they are","By a resonant frequency a radio picks up from the level key","By the order they were discovered","By a vote of the M.E.G."],"answer":1,"lore":"The number on the radio dial becomes the level's designation."},
+            {"id":15,"category":"Entities","difficulty":"easy","q":"A Smiler is recognizable in the dark by what?","options":["A pair of glowing eyes and a wide grin","Red glowing horns","A single floating hand","A trail of footprints"],"answer":0,"lore":"Often just a crescent of teeth in the black; it strikes when your light dies."},
+            {"id":16,"category":"Entities","difficulty":"easy","q":"What's the standard defense against a Smiler?","options":["Holding your breath","Keeping a light source on it","Throwing almond water","Standing perfectly still"],"answer":1,"lore":"Smilers hate light; carry backup batteries."},
+            {"id":17,"category":"Entities","difficulty":"easy","q":"A Hound moves how?","options":["Floating silently","On all fours like a dog","Burrowing underground","Hopping on two legs"],"answer":1,"lore":"A toothy humanoid scrambling on all fours — hence \"Hound.\""},
+            {"id":18,"category":"Entities","difficulty":"medium","q":"Why is a Hound's bite especially feared?","options":["It's venomous and paralyzes you","Its saliva carries a disease that can turn you into one","It marks you so other entities track you","It erases your memory"],"answer":1,"lore":"Hounds aren't smart and can be slipped — but never let one bite you."},
+            {"id":19,"category":"Entities","difficulty":"medium","q":"What is a Skin-Stealer's signature trick?","options":["It mimics your voice over a radio","It wears the skin of victims to pose as a human","It turns invisible in light","It copies your shadow"],"answer":1,"lore":"Tell: it repeats phrases but doesn't understand them."},
+            {"id":20,"category":"Entities","difficulty":"easy","q":"A Faceling is a humanoid that lacks what?","options":["Legs","Any facial features","A shadow","Hands"],"answer":1,"lore":"Blank heads; child Facelings are more mischievous and dangerous."},
+            {"id":21,"category":"Entities","difficulty":"hard","q":"Which Faceling sighting is considered almost a death sentence?","options":["The Shadow Faceling","The Pink Dress Faceling","The Tall Faceling","The Office Faceling"],"answer":1,"lore":"Among the most dreaded variants in the lore."},
+            {"id":22,"category":"Entities","difficulty":"hard","q":"Partygoers turn victims into more Partygoers using what?","options":["A handshake","Lamprey-like mouths at the ends of their arms","A spoken curse","Spores in the air"],"answer":1,"lore":"Slow and clumsy-looking, but their touch is the danger — and they hold red balloons."},
+            {"id":23,"category":"Entities","difficulty":"medium","q":"A Clump is best described as…","options":["A cloud of black smoke","A ball of tangled arms and legs","A swarm of insects","A walking pile of books"],"answer":1,"lore":"Some hide one long arm to grab prey from feet away — common near Level 2."},
+            {"id":24,"category":"Entities","difficulty":"medium","q":"Deathmoths are mostly harmless because they're drawn to what?","options":["Almond water","Light fixtures","Loud noise","Body heat"],"answer":1,"lore":"Human-sized moths that cluster around lights and ignore people."},
+            {"id":25,"category":"Entities","difficulty":"hard","q":"What item repels a Duller, which drains your awareness?","options":["Fire","Almond water","A loud whistle","A mirror"],"answer":1,"lore":"Dullers hate almond water — the one reliable way to survive one without fleeing."},
+            {"id":26,"category":"Items","difficulty":"easy","q":"What does Almond Water do for a wanderer?","options":["Lets you see in the dark","Restores sanity / mental stability and hydration","Makes you invisible to entities","Heals broken bones instantly"],"answer":1,"lore":"The key survival item; it neutralizes some entity effects too."},
+            {"id":27,"category":"Items","difficulty":"hard","q":"In the real world, the smell of bitter almonds warns of what?","options":["Mold","Cyanide poisoning","Gas leak","Spoiled milk"],"answer":1,"lore":"The author's intent: \"almond water\" hinted the water was poisoned."},
+            {"id":28,"category":"Items","difficulty":"medium","q":"What harmful fluid is the dark counterpart to Almond Water?","options":["Liquid Pain","Black Honey","Grey Milk","Rust Water"],"answer":0,"lore":"On some levels, almond water turns into Liquid Pain at night — even sealed."},
+            {"id":29,"category":"Items","difficulty":"easy","q":"Which everyday tool is stressed as essential gear?","options":["A compass (they work great there)","A flashlight or headlamp","A folding chair","A printed map of Level 0"],"answer":1,"lore":"Compasses and GPS fail; reliable light does not."},
+            {"id":30,"category":"Items","difficulty":"medium","q":"Why are random supply crates in Level 1 risky to open?","options":["They're rigged to explode","Contents are unpredictable — useful gear mixed with disturbing junk","They scream when opened","They're always empty"],"answer":1,"lore":"One holds batteries and food; the next, used syringes and human hair."},
+            {"id":31,"category":"Factions","difficulty":"medium","q":"What does \"M.E.G.\" stand for?","options":["Maze Escape Guild","Major Explorer Group","Memory Erasure Group","Magnetic Energy Grid"],"answer":1,"lore":"The largest human faction — they catalogue levels and run rescue bases."},
+            {"id":32,"category":"Factions","difficulty":"medium","q":"The M.E.G. numbers entities mainly for what reason?","options":["To rank how scary they are","For convenient cataloguing and reference","To decide which to hunt","To sell the data"],"answer":1,"lore":"\"Entity 3 — Smiler,\" \"Entity 8 — Hound,\" and so on."},
+            {"id":33,"category":"Lore","difficulty":"medium","q":"GPS, compasses, and radios in Level 0 tend to…","options":["Work perfectly","Fail or become badly distorted","Only work at night","Attract entities"],"answer":1,"lore":"Part of why navigation is essentially impossible."},
+            {"id":34,"category":"Lore","difficulty":"hard","q":"What's the harsh advice given to new wanderers?","options":["Keep trying to get home at all costs","Accept you likely won't get home, and focus on survival","Sleep until rescue arrives","Shout for other wanderers constantly"],"answer":1,"lore":"Panic ruins your direction sense and makes noise that draws entities."},
+            {"id":35,"category":"Lore","difficulty":"medium","q":"What's the chilling warning about hearing something nearby?","options":["It can't see you if you don't move","If you hear it, it has almost certainly already heard you","It's probably just the pipes","Entities never come to Level 0"],"answer":1,"lore":"Straight from the original post's final line."}
+        ];
+        const usedQuestionIds = new Set();
+
+        // DOM references
+        const menuScreen = document.getElementById('menu-screen');
+        const gameOverScreen = document.getElementById('game-over-screen');
+        const escapeScreen = document.getElementById('escape-screen');
+        const btnStart = document.getElementById('btn-start');
+        const btnResume = document.getElementById('btn-resume');
+        const btnReset = document.getElementById('btn-reset');
+        const btnRestartGo = document.getElementById('btn-restart-go');
+        const btnRestartEsc = document.getElementById('btn-restart-esc');
+        const btnBackToMenu = document.getElementById('btn-back-to-menu');
+        const btnBackToMenuEsc = document.getElementById('btn-back-to-menu-esc');
+        const crosshair = document.getElementById('crosshair');
+
+        const statusText = document.getElementById('status');
+        const signalText = document.getElementById('signal-text');
+        const coordInfo = document.getElementById('coord-info');
+        const hitboxStatus = document.getElementById('hitbox-status');
+        const slots = document.querySelectorAll('.slot');
+        const battleLog = document.getElementById('battle-log');
+        const ammoDisplay = document.getElementById('ammo-display');
+        const reticleAmmo = document.getElementById('reticle-ammo');
+        const inventoryDiv = document.getElementById('inventory');
+        const btnTogglePlayer = document.getElementById('toggle-player');
+        const hpText = document.getElementById('hp-text');
+        const bloodBar = document.getElementById('blood-bar');
+        const sanityBar = document.getElementById('sanity-bar');
+        const sanityVignette = document.getElementById('sanity-vignette');
+        const interactPrompt = document.getElementById('interact-prompt');
+        const creativeIndicator = document.getElementById('creative-indicator');
+
+        // Terminal/quiz DOM
+        const terminalScreen = document.getElementById('terminal-screen');
+        const termQ = document.getElementById('term-q');
+        const termOptions = document.getElementById('term-options');
+        const termResult = document.getElementById('term-result');
+        const termContinue = document.getElementById('term-continue');
+        const termMeta = document.getElementById('term-meta');
+
+        const goKills = document.getElementById('go-kills');
+        const goNotes = document.getElementById('go-notes');
+        const goTime = document.getElementById('go-time');
+        const goScore = document.getElementById('go-score');
+        const escKills = document.getElementById('esc-kills');
+        const escNotes = document.getElementById('esc-notes');
+        const escTime = document.getElementById('esc-time');
+        const escScore = document.getElementById('esc-score');
+
+        document.getElementById('needed-count').innerText = NOTES_TO_ESCAPE;
+
+        // Three.js scene setup
+        const scene = new THREE.Scene();
+        scene.fog = new THREE.FogExp2(0x1a1a0d, 0.05);
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.01, 1000);
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true;
+        document.body.appendChild(renderer.domElement);
+
+        // --- Audio setup ---
+        const listener = new THREE.AudioListener();
+        camera.add(listener);
+
+        const bgmSound = new THREE.Audio(listener);
+        const audioLoader = new THREE.AudioLoader();
+        audioLoader.load('sounds/bgm_1.mp3', function(buffer) {
+            bgmSound.setBuffer(buffer);
+            bgmSound.setLoop(true);
+            bgmSound.setLoopStart(0.03);
+            bgmSound.offset = 0.03;
+            bgmSound.setVolume(0.2);
+        });
+
+        const playerStepSound = new THREE.Audio(listener);
+        audioLoader.load('sounds/footsteps_walk.mp3', function(buffer) {
+            playerStepSound.setBuffer(buffer);
+            playerStepSound.setLoop(true);
+            playerStepSound.setVolume(1.5);
+        });
+
+        let entityStepBuffer = null;
+        audioLoader.load('sounds/entity_steps.mp3', function(buffer) {
+            entityStepBuffer = buffer;
+        });
+
+        const shotSoundPool = [];
+        for(let i=0; i<5; i++) shotSoundPool.push(new THREE.Audio(listener));
+        let shotSoundIndex = 0;
+
+        function playShotSound(path) {
+            if (!soundEnabled) return;
+            const sound = shotSoundPool[shotSoundIndex];
+            shotSoundIndex = (shotSoundIndex + 1) % shotSoundPool.length;
+            if (sound.isPlaying) sound.stop();
+            audioLoader.load(path, function(buffer) {
+                sound.setBuffer(buffer);
+                sound.setVolume(0.75);
+                sound.play();
+            });
+        }
+
+        const ambientLight = new THREE.AmbientLight(0xffddaa, 0.3);
+        scene.add(ambientLight);
+        const pointLight = new THREE.PointLight(0xffffff, 1, 15);
+        scene.add(pointLight);
+
+        // Flashlight: a forward cone parented to the camera, off until equipped.
+        const flashlight = new THREE.SpotLight(0xfff2cc, 0, 45, Math.PI / 5, 0.4, 1.0);
+        flashlight.position.set(0, 0, 0);
+        camera.add(flashlight);
+        const flashTarget = new THREE.Object3D();
+        flashTarget.position.set(0, 0, -1); // camera looks down its local -Z
+        camera.add(flashTarget);
+        flashlight.target = flashTarget;
+        // Camera must be in the scene graph so lights/weapons parented to it work.
+        scene.add(camera);
+
+        // Small fill light so the held weapon model reads as itself, not a flat
+        // grey silhouette. Short range keeps it on the viewmodel, not the room.
+        const viewmodelLight = new THREE.PointLight(0xfff0e0, 1.2, 3.0);
+        viewmodelLight.position.set(0.15, 0.1, -0.15);
+        camera.add(viewmodelLight);
+
+        // 3D model variables
+        let player;
+        let entities = [];
+        let entityMixers = [];
+        let currentWeaponPivot = null;
+        // First-person held models, one per hotbar slot (loaded below).
+        const heldPivots = {};
+        // The imported models are untextured, so each gets a tinted material:
+        // tint colour, metalness, roughness.
+        const HELD_VIEW = {
+            0: { file: 'models/weapon_fist.glb',       targetSize: 0.26, pos: new THREE.Vector3(0.16, -0.24, -0.50), rot: new THREE.Euler(0, Math.PI / 2, 0), tex: 'models/texture/skin.png',       tint: 0xb07a52, metal: 0.0, rough: 0.8 },
+            1: { file: 'models/weapon_m16.glb',        targetSize: 0.55, pos: new THREE.Vector3(0.24, -0.28, -0.55), rot: new THREE.Euler(0, Math.PI / 2, 0), tex: 'models/texture/m16.png',        tint: 0x7a7a82, metal: 0.1, rough: 0.55 },
+            2: { file: 'models/weapon_shotgun.glb',    targetSize: 0.55, pos: new THREE.Vector3(0.24, -0.28, -0.55), rot: new THREE.Euler(0, Math.PI / 2, 0), tex: 'models/texture/shotgun.png',    tint: 0x95642f, metal: 0.1, rough: 0.55 },
+            3: { file: 'models/weapon_pistol.glb',     targetSize: 0.32, pos: new THREE.Vector3(0.20, -0.26, -0.50), rot: new THREE.Euler(0, Math.PI / 2, 0), tex: 'models/texture/m16.png',        tint: 0x73737c, metal: 0.1, rough: 0.55 },
+            4: { file: 'models/weapon_flashlight.glb', targetSize: 0.30, pos: new THREE.Vector3(0.20, -0.24, -0.50), rot: new THREE.Euler(0, Math.PI / 2, 0), tex: 'models/texture/flashlight.png', tint: 0x64646c, metal: 0.1, rough: 0.55 },
+        };
+        let mixerPlayer;
+        let roomPrototype = null;
+        const activeRooms = {};
+        let playerBoxHelper;
+        let showHitboxes = false;
+        let showCoords = false;
+        let f3ActionConsumed = false;
+
+        // --- M.E.G. noteStations + exit ---
+        const noteStations = [];          // live terminal meshes in the world
+        const readStations = new Set();// chunk keys whose terminal has been read
+        let focusedNote = null;     // terminal the player can currently read
+        let exitDoor = null;         // spawns when enough notes are logged
+
+        const clock = new THREE.Clock();
+        const keys = { w: false, a: false, s: false, d: false, f3: false, ctrl: false, space: false, shift: false };
+        let cameraPitch = 0.0;
+
+        // --- Event listeners ---
+
+        // Block browser shortcut keys
+        window.addEventListener('keydown', (e) => {
+            if (
+                (e.key.startsWith('F') && e.key.length > 1) ||
+                (e.ctrlKey && ['s', 'p', 'f', 'r', 'g', 'h'].includes(e.key.toLowerCase())) ||
+                e.key === 'Tab'
+            ) {
+                e.preventDefault();
+            }
+        }, { passive: false });
+
+        document.addEventListener('contextmenu', event => event.preventDefault());
+
+        btnTogglePlayer.onclick = () => {
+            isPlayerVisible = !isPlayerVisible;
+            if(player) {
+                player.traverse(c => {
+                    if (c.isSkinnedMesh) c.visible = isPlayerVisible;
+                });
+            }
+            btnTogglePlayer.innerText = isPlayerVisible ? "👤 Toggle Player Model (ON)" : "👤 Toggle Player Model (OFF)";
+        };
+
+        function grabPointer() {
+            if (isInventoryOpen || isQuizOpen) return;
+            document.body.requestPointerLock();
+            if (listener.context.state === 'suspended') listener.context.resume();
+            if (soundEnabled && !bgmSound.isPlaying && bgmSound.buffer) bgmSound.play();
+            entities.forEach(en => {
+                if(en.userData.sound && !en.userData.sound.isPlaying && soundEnabled) en.userData.sound.play();
+            });
+        }
+
+        renderer.domElement.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            if (!isGameActive && !isInventoryOpen && !isQuizOpen) grabPointer();
+            else if (isGameActive) fireShot();
+        }, { passive: false });
+
+        btnStart.addEventListener('click', () => { beginRun(); grabPointer(); });
+        btnResume.addEventListener('click', grabPointer);
+        btnReset.addEventListener('click', () => { beginRun(); grabPointer(); });
+
+        btnRestartGo.addEventListener('click', () => { beginRun(); grabPointer(); });
+        btnRestartEsc.addEventListener('click', () => { beginRun(); grabPointer(); });
+
+        function returnToMenu() {
+            gameOverScreen.style.display = 'none';
+            escapeScreen.style.display = 'none';
+            menuScreen.style.display = 'flex';
+            menuScreen.style.opacity = '1';
+
+            hasGameStarted = false;
+            btnStart.classList.remove('hidden');
+            btnResume.classList.add('hidden');
+            btnReset.classList.add('hidden');
+
+            purgeEntities();
+            resetTerminals();
+            if (player) {
+                player.position.set(0, 0, 0);
+                player.rotation.set(0, 0, 0);
+            }
+
+            if(bgmSound.isPlaying) bgmSound.stop();
+        }
+        btnBackToMenu.addEventListener('click', returnToMenu);
+        btnBackToMenuEsc.addEventListener('click', returnToMenu);
+
+        function beginRun() {
+            isGameOver = false;
+            gameOverScreen.style.display = 'none';
+            escapeScreen.style.display = 'none';
+            statusText.innerText = isCreativeMode ? "Creative" : "Running";
+            statusText.style.color = "#ddd";
+            battleLog.innerText = "";
+
+            playerHealth = 100;
+            refreshBloodHud();
+            sanity = 100;
+            killCount = 0;
+            notesAnswered = 0;
+            usedQuestionIds.clear();
+            refreshSignalHud();
+            refreshSanityHud();
+            startTime = performance.now();
+            camera.fov = 75;
+            camera.updateProjectionMatrix();
+
+            magazines[1] = ARSENAL[1].maxAmmo;
+            magazines[2] = ARSENAL[2].maxAmmo;
+            magazines[3] = ARSENAL[3].maxAmmo;
+            flashlight.intensity = 0;
+
+            isReloading = false;
+            isAiming = false;
+            isTriggerHeld = false;
+            playerVelocityY = 0;
+            activeSlot = 1;
+            recoilBufferPitch = 0;
+            recoilBufferYaw = 0;
+
+            refreshAmmoHud();
+            refreshHotbar();
+            mountWeapon();
+
+            if (player) {
+                player.position.set(0, 0, 0);
+                player.rotation.set(0, 0, 0);
+            }
+
+            purgeEntities();
+            resetTerminals();
+
+            entityProto = entityAssets[activeEntityKind];
+
+            // No monster at the start — it appears after the first quiz (or a
+            // short grace period). See maybeReleaseHunter() in tickEntities().
+            monsterSpawned = false;
+            if (entityProto && gameMode === 2) releaseEntity(0, 50);
+
+            cameraPitch = 0;
+
+            Object.values(activeRooms).forEach(chunk => {
+                if (chunk.userData.debugHelper) scene.remove(chunk.userData.debugHelper);
+                scene.remove(chunk);
+            });
+            for (const key in activeRooms) delete activeRooms[key];
+
+            // Guaranteed M.E.G. terminal right in front of spawn so the quiz
+            // is the first thing the player meets (player faces +Z at start).
+            const starter = buildTerminal(0, 0, { key: 'starter', x: 0, z: 5 });
+            scene.add(starter);
+            noteStations.push(starter);
+
+            // Opening hint so the quiz can't be missed.
+            battleLog.style.color = '#ffe14d';
+            battleLog.innerText = 'Walk forward to the glowing M.E.G. terminal and press E to read it.';
+
+            if (bgmSound.buffer && soundEnabled) {
+                if (bgmSound.isPlaying) bgmSound.stop();
+                bgmSound.play();
+            }
+        }
+
+        function purgeEntities() {
+            entities.forEach(e => {
+                scene.remove(e);
+                if(e.userData.helper) scene.remove(e.userData.helper);
+                if(e.userData.sound && e.userData.sound.isPlaying) e.userData.sound.stop();
+            });
+            entities = [];
+            entityMixers = [];
+        }
+
+        function releaseEntity(x, z) {
+            const tmpl = entityAssets[activeEntityKind];
+            if (!tmpl) return;
+
+            const enemy = SkeletonUtils.clone(tmpl.scene);
+            enemy.position.set(x, 0, z);
+
+            enemy.traverse((child) => {
+                if (child.isMesh) {
+                    child.material = child.material.clone();
+                    child.material.transparent = true;
+                    child.material.opacity = 1.0;
+                }
+            });
+
+            if(tmpl.animations && tmpl.animations.length > 0){
+                const mixer = new THREE.AnimationMixer(enemy);
+                const action = mixer.clipAction(tmpl.animations[0]);
+                action.play();
+                entityMixers.push(mixer);
+                enemy.userData.mixer = mixer;
+            }
+
+            if (entityStepBuffer) {
+                const sound = new THREE.PositionalAudio(listener);
+                sound.setBuffer(entityStepBuffer);
+                sound.setRefDistance(5);
+                sound.setLoop(true);
+                sound.setVolume(1.0);
+                enemy.add(sound);
+                enemy.userData.sound = sound;
+                if(isGameActive && soundEnabled) sound.play();
+            }
+
+            enemy.userData.hp = 5;
+            enemy.userData.dead = false;
+            enemy.userData.fade = 1.0;
+
+            if (showHitboxes) {
+                const helper = new THREE.BoxHelper(enemy, 0xff0000);
+                scene.add(helper);
+                enemy.userData.helper = helper;
+            }
+
+            scene.add(enemy);
+            entities.push(enemy);
+        }
+
+        function toggleFreecam() {
+            isCreativeMode = !isCreativeMode;
+            if (isCreativeMode) {
+                playerVelocityY = 0;
+                battleLog.innerText = "CREATIVE MODE: ON";
+                battleLog.style.color = "cyan";
+                statusText.innerText = "Creative";
+                creativeIndicator.style.display = 'block';
+            } else {
+                battleLog.innerText = "CREATIVE MODE: OFF";
+                statusText.innerText = "Running";
+                creativeIndicator.style.display = 'none';
+            }
+        }
+
+        // The hunter holds off at the start: it appears once the player has
+        // answered their first M.E.G. note, or after a short grace period.
+        function maybeReleaseHunter() {
+            if (monsterSpawned || gameMode !== 1) return;
+            if (!isGameActive || isGameOver || isQuizOpen) return;
+            if (!entityAssets[activeEntityKind]) return;
+            const ready = notesAnswered >= 1 || (performance.now() - startTime) > MONSTER_GRACE_MS;
+            if (!ready) return;
+
+            const angle = Math.random() * Math.PI * 2;
+            const dist = 16 + Math.random() * 8; // spawns off in the dark, not on top of you
+            releaseEntity(player.position.x + Math.cos(angle) * dist,
+                       player.position.z + Math.sin(angle) * dist);
+            monsterSpawned = true;
+            battleLog.style.color = 'red';
+            battleLog.innerText = 'Something is awake now.';
+        }
+
+        function tickEntities(delta) {
+            if (!player || isGameOver) return;
+
+            maybeReleaseHunter();
+
+            if (gameMode === 2 && isGameActive) {
+                if (entities.length < MAX_HORDE) {
+                    if (Math.random() < 0.005) {
+                        const angle = Math.random() * Math.PI * 2;
+                        const dist = ROOM_SIZE + 10 + Math.random() * 20;
+                        const spawnX = player.position.x + Math.cos(angle) * dist;
+                        const spawnZ = player.position.z + Math.sin(angle) * dist;
+                        releaseEntity(spawnX, spawnZ);
+                    }
+                }
+            }
+
+            let closestDist = 9999;
+
+            for (let i = entities.length - 1; i >= 0; i--) {
+                const en = entities[i];
+
+                if (en.userData.dead) {
+                    en.rotation.x -= delta * 3;
+                    en.userData.fade -= delta * 0.5;
+                    en.traverse(c => {
+                        if (c.isMesh) c.material.opacity = Math.max(0, en.userData.fade);
+                    });
+
+                    if (en.userData.fade <= 0) {
+                        scene.remove(en);
+                        if (en.userData.helper) scene.remove(en.userData.helper);
+                        entities.splice(i, 1);
+                        const mIndex = entityMixers.indexOf(en.userData.mixer);
+                        if (mIndex > -1) entityMixers.splice(mIndex, 1);
+                    }
+                    continue;
+                }
+
+                if (en.userData.mixer) en.userData.mixer.update(delta);
+
+                const dist = en.position.distanceTo(player.position);
+                if (dist < closestDist) closestDist = dist;
+
+                if (isGameActive && !isQuizOpen) {
+                    en.lookAt(player.position);
+                    en.translateZ(STALK_SPEED);
+
+                    if (dist < 1.0) {
+                        if (!isCreativeMode) {
+                            playerHealth -= 30 * delta;
+                            refreshBloodHud();
+
+                            camera.fov = 75 + (Math.random() * 5);
+                            camera.updateProjectionMatrix();
+
+                            if (playerHealth <= 0) {
+                                endRunDeath();
+                            }
+                        }
+                    }
+                }
+
+                if (en.userData.helper) en.userData.helper.update();
+            }
+
+            if (closestDist < 10.0 && playerHealth > 0) {
+                const intensityBase = 1.0;
+                const flicker = Math.random() > 0.8 ? 0.2 : 1.0;
+                pointLight.intensity = intensityBase * flicker;
+                // Proximity gnaws at your sanity
+                if (!isCreativeMode && !isQuizOpen) adjustSanity(-delta * (10 - closestDist) * 0.4);
+            } else {
+                pointLight.intensity = 1.0;
+            }
+
+            if (playerHealth > 0 && Math.abs(camera.fov - 75) > 1 && !isAiming) {
+                camera.fov += (75 - camera.fov) * 0.1;
+                camera.updateProjectionMatrix();
+            }
+        }
+
+        // --- Sanity helpers ---
+        function adjustSanity(amount) {
+            sanity = Math.max(0, Math.min(100, sanity + amount));
+            refreshSanityHud();
+            if (sanity <= 0 && !isGameOver && !isCreativeMode) {
+                endRunDeath(true);
+            }
+        }
+        function refreshSanityHud() {
+            sanityBar.style.width = sanity + '%';
+            // Bar goes red as it empties
+            const r = Math.floor(201 + (255 - 201) * (1 - sanity / 100));
+            sanityBar.style.background = sanity > 35
+                ? 'linear-gradient(90deg,#c9b037,#ffe14d)'
+                : 'linear-gradient(90deg,#a00,#f55)';
+            sanityVignette.style.opacity = sanity < 50 ? (1 - sanity / 50) * 0.8 : 0;
+        }
+        function refreshSignalHud() {
+            signalText.innerText = `${notesAnswered} / ${NOTES_TO_ESCAPE}`;
+        }
+        // Blood / HP bar (how much you have left)
+        function refreshBloodHud() {
+            const hp = Math.max(0, Math.floor(playerHealth));
+            hpText.innerText = hp;
+            bloodBar.style.width = hp + '%';
+        }
+
+        function endRunDeath(byInsanity = false) {
+            isGameOver = true;
+            document.exitPointerLock();
+
+            const survivalTime = Math.floor((performance.now() - startTime) / 1000);
+            const score = (killCount * 5) + (notesAnswered * 10) + (survivalTime * 1);
+
+            document.querySelector('#game-over-screen .go-title').innerText = byInsanity ? "LOST TO THE HUM" : "YOU DIED";
+            goKills.innerText = killCount;
+            goNotes.innerText = notesAnswered;
+            goTime.innerText = survivalTime + "s";
+            goScore.innerText = score;
+
+            gameOverScreen.style.display = 'flex';
+        }
+
+        function endRunEscape() {
+            isGameOver = true;
+            document.exitPointerLock();
+
+            const survivalTime = Math.floor((performance.now() - startTime) / 1000);
+            const score = (killCount * 5) + (notesAnswered * 10) + (survivalTime * 1) + 100;
+
+            escKills.innerText = killCount;
+            escNotes.innerText = notesAnswered;
+            escTime.innerText = survivalTime + "s";
+            escScore.innerText = score;
+
+            escapeScreen.style.display = 'flex';
+            if(bgmSound.isPlaying) bgmSound.stop();
+        }
+
+        document.addEventListener('pointerlockchange', () => {
+            if (document.pointerLockElement === document.body) {
+                isGameActive = true;
+                isInventoryOpen = false;
+                inventoryDiv.style.display = 'none';
+                if (!hasGameStarted) hasGameStarted = true;
+                menuScreen.style.opacity = '0';
+                setTimeout(() => { if(isGameActive) menuScreen.style.display = 'none'; }, 300);
+                crosshair.style.display = 'block';
+
+                if (listener.context.state === 'suspended') listener.context.resume();
+                if(bgmSound.buffer && !bgmSound.isPlaying && soundEnabled) bgmSound.play();
+
+                entities.forEach(en => {
+                    if(en.userData.sound && !en.userData.sound.isPlaying && soundEnabled) en.userData.sound.play();
+                });
+            } else {
+                isGameActive = false;
+                // Don't pop the menu if we're reading a note or in the inventory
+                if(!isInventoryOpen && !isGameOver && !isQuizOpen) {
+                    menuScreen.style.display = 'flex';
+                    requestAnimationFrame(() => { menuScreen.style.opacity = '1'; });
+                    if (hasGameStarted) {
+                        btnStart.classList.add('hidden'); btnResume.classList.remove('hidden'); btnReset.classList.remove('hidden');
+                    } else {
+                        btnStart.classList.remove('hidden'); btnResume.classList.add('hidden'); btnReset.classList.add('hidden');
+                    }
+                }
+                crosshair.style.display = 'none';
+                interactPrompt.style.display = 'none';
+
+                if(playerStepSound.isPlaying) playerStepSound.stop();
+                entities.forEach(en => {
+                    if(en.userData.sound && en.userData.sound.isPlaying) en.userData.sound.pause();
+                });
+            }
+        });
+
+        document.body.addEventListener('mousemove', (event) => {
+            if (!isGameActive || !player || isGameOver) return;
+            player.rotation.y -= event.movementX * LOOK_SENS;
+            cameraPitch += event.movementY * LOOK_SENS;
+            const limit = Math.PI / 2 - 0.1;
+            cameraPitch = Math.max(-limit, Math.min(limit, cameraPitch));
+        });
+
+        document.body.addEventListener('mousedown', (event) => {
+            if (!isGameActive || isGameOver) return;
+            if (event.button === 0 && ARSENAL[activeSlot]) {
+                isTriggerHeld = true;
+                fireShot();
+            }
+            if (event.button === 2) {
+                isAiming = true;
+                crosshair.classList.add('aiming');
+            }
+        });
+
+        document.body.addEventListener('mouseup', (event) => {
+            if (event.button === 0) isTriggerHeld = false;
+            if (event.button === 2) {
+                isAiming = false;
+                crosshair.classList.remove('aiming');
+            }
+        });
+
+        function fireShot() {
+            if (isReloading) return;
+
+            const weapon = ARSENAL[activeSlot];
+            if (!weapon) return;
+
+            if (magazines[activeSlot] <= 0) {
+                reloadGun();
+                return;
+            }
+
+            const now = performance.now();
+            if (now - lastShotTime < weapon.rate * 0.8 && !isTriggerHeld) return;
+
+            playShotSound(weapon.shootSound);
+
+            // Recoil kick
+            if (recoilEnabled && weapon.recoil) {
+                let pitchRecoil = weapon.recoil * (0.8 + Math.random() * 0.4);
+                if (Math.random() < 0.15) pitchRecoil = -pitchRecoil * 0.5;
+                recoilBufferPitch += pitchRecoil;
+
+                const yawRecoil = (Math.random() - 0.5) * weapon.recoil * 0.8;
+                recoilBufferYaw += yawRecoil;
+            }
+
+            magazines[activeSlot]--;
+            refreshAmmoHud();
+            lastShotTime = now;
+
+            const spreadBase = isAiming ? weapon.spreadAds : weapon.spreadHip;
+
+            for (let i = 0; i < weapon.pellets; i++) {
+                const xOffset = (Math.random() - 0.5) * spreadBase;
+                const yOffset = (Math.random() - 0.5) * spreadBase;
+
+                raycaster.setFromCamera(new THREE.Vector2(xOffset, yOffset), camera);
+
+                const aliveEnemies = entities.filter(e => !e.userData.dead);
+                const intersects = raycaster.intersectObjects(aliveEnemies, true);
+                let endPoint;
+
+                if (intersects.length > 0) {
+                    const hit = intersects[0];
+                    endPoint = hit.point;
+
+                    let hitEnemy = hit.object;
+                    while(hitEnemy.parent && hitEnemy.parent !== scene) {
+                        if (entities.includes(hitEnemy)) break;
+                        hitEnemy = hitEnemy.parent;
+                    }
+
+                    if (entities.includes(hitEnemy) && !hitEnemy.userData.dead) {
+                        hitEnemy.userData.hp -= weapon.damage;
+                        battleLog.innerText = `Entity HP: ${hitEnemy.userData.hp}`;
+
+                        const pushDir = hit.point.clone().sub(camera.position).normalize();
+                        hitEnemy.position.add(pushDir.multiplyScalar(0.5));
+
+                        if (hitEnemy.userData.hp <= 0) {
+                            hitEnemy.userData.dead = true;
+                            if (hitEnemy.userData.sound && hitEnemy.userData.sound.isPlaying) hitEnemy.userData.sound.stop();
+
+                            killCount++;
+                            battleLog.innerText = `Entity Down! (Total: ${killCount})`;
+                        }
+                    }
+                } else {
+                    endPoint = raycaster.ray.at(100);
+                }
+
+                // Tracer originates from the camera (no held weapon model).
+                const startPoint = camera.getWorldPosition(new THREE.Vector3());
+                startPoint.y += 0.05;
+
+                const material = new THREE.LineBasicMaterial({ color: 0xffff00, transparent: true, opacity: 0.6 });
+                const points = [startPoint, endPoint];
+                const geometry = new THREE.BufferGeometry().setFromPoints(points);
+                const line = new THREE.Line(geometry, material);
+                scene.add(line);
+                setTimeout(() => { scene.remove(line); geometry.dispose(); material.dispose(); }, 50);
+            }
+        }
+
+        function reloadGun() {
+            const weapon = ARSENAL[activeSlot];
+            if (!weapon) return;
+            if (isReloading || magazines[activeSlot] === weapon.maxAmmo) return;
+
+            isReloading = true;
+            isTriggerHeld = false;
+            battleLog.innerText = "Reloading...";
+            ammoDisplay.classList.add('reloading');
+            if (soundEnabled) playShotSound('sounds/reload.mp3');
+
+            setTimeout(() => {
+                magazines[activeSlot] = weapon.maxAmmo;
+                isReloading = false;
+                battleLog.innerText = "";
+                ammoDisplay.classList.remove('reloading');
+                refreshAmmoHud();
+                mountWeapon();
+            }, 2000);
+        }
+
+        function refreshAmmoHud() {
+            const weapon = ARSENAL[activeSlot];
+
+            if (weapon) {
+                ammoDisplay.style.display = 'block';
+                ammoDisplay.innerHTML = `${magazines[activeSlot]} <span>/ ${weapon.maxAmmo}</span>`;
+            } else {
+                ammoDisplay.style.display = 'none';
+            }
+
+            reticleAmmo.innerHTML = '';
+            if (weapon) {
+                const current = magazines[activeSlot];
+                const max = weapon.maxAmmo;
+
+                for (let i = 0; i < max; i++) {
+                    const pip = document.createElement('div');
+                    pip.classList.add('ammo-pip');
+
+                    if (max > 10) {
+                        pip.style.width = '6px'; pip.style.height = '6px';
+                    } else {
+                        pip.style.width = '12px'; pip.style.height = '12px';
+                    }
+
+                    if (i >= current) {
+                        pip.classList.add('empty');
+                    }
+                    reticleAmmo.appendChild(pip);
+                }
+            }
+        }
+
+        window.addEventListener('keydown', (e) => {
+            if ((e.code === 'KeyC') && (e.ctrlKey || keys['ctrl'])) {
+                e.preventDefault();
+                toggleFreecam();
+                return;
+            }
+
+            // E = read a nearby M.E.G. terminal
+            if ((e.key === 'e' || e.key === 'E') && isGameActive && focusedNote && !isQuizOpen) {
+                openNote(focusedNote);
+                return;
+            }
+
+            if (e.key === 'F1') {
+                e.preventDefault();
+                isInventoryOpen = !isInventoryOpen;
+                if (isInventoryOpen) {
+                    document.exitPointerLock();
+                    inventoryDiv.style.display = 'block';
+                    menuScreen.style.display = 'none';
+                } else {
+                    inventoryDiv.style.display = 'none';
+                    if (hasGameStarted) grabPointer();
+                }
+            }
+            if (e.key === 'Escape' && isInventoryOpen) {
+                isInventoryOpen = false;
+                inventoryDiv.style.display = 'none';
+                menuScreen.style.display = 'flex';
+            }
+
+            if (e.key === 'F3') { e.preventDefault(); keys['f3'] = true; }
+            if ((e.key === 'b' || e.key === 'B') && keys['f3']) { toggleDebugBoxes(); f3ActionConsumed = true; }
+
+            if (e.key.toLowerCase() === 'r') reloadGun();
+            if (e.key === 'Control') keys['ctrl'] = true;
+            if (e.code === 'Space' || e.key === ' ') { e.preventDefault(); keys['space'] = true; }
+            if (e.key === 'Shift') keys['shift'] = true;
+
+            if (e.key >= '1' && e.key <= '5') {
+                selectSlot(parseInt(e.key) - 1);
+            }
+            keys[e.key.toLowerCase()] = true;
+        });
+
+        window.addEventListener('keyup', (e) => {
+            if (e.key === 'F3') {
+                if (!f3ActionConsumed) toggleCoordReadout();
+                keys['f3'] = false; f3ActionConsumed = false;
+            }
+            if (e.key === 'Control') keys['ctrl'] = false;
+            if (e.code === 'Space' || e.key === ' ') keys['space'] = false;
+            if (e.key === 'Shift') keys['shift'] = false;
+
+            keys[e.key.toLowerCase()] = false;
+        });
+
+        window.addEventListener('wheel', (e) => {
+            if(!isGameActive) return;
+            rotateSlot(e.deltaY > 0 ? 1 : -1);
+        });
+
+        // A slot is a real "form" if it's the fists (slot 0) or holds a weapon.
+        function slotUsable(i) { return i === 0 || i === FLASHLIGHT_SLOT || !!ARSENAL[i]; }
+
+        // Jump straight to a slot (number keys) — ignore empty slots.
+        function selectSlot(i) {
+            if (!slotUsable(i)) return;
+            activeSlot = i;
+            refreshHotbar();
+            mountWeapon();
+        }
+
+        // Step to the next/previous usable form, skipping empty slots so the
+        // wheel cleanly cycles Fists -> M16 -> Shotgun -> Fists ...
+        function rotateSlot(dir) {
+            let i = activeSlot;
+            for (let n = 0; n < SLOT_COUNT; n++) {
+                i = (i + dir + SLOT_COUNT) % SLOT_COUNT;
+                if (slotUsable(i)) break;
+            }
+            activeSlot = i;
+            refreshHotbar();
+            mountWeapon();
+        }
+
+        function refreshHotbar() {
+            slots.forEach((slot, index) => {
+                if (index === activeSlot) slot.classList.add('active');
+                else slot.classList.remove('active');
+            });
+            if (activeSlot === 2) crosshair.classList.add('shotgun');
+            else crosshair.classList.remove('shotgun');
+        }
+
+        function mountWeapon() {
+            if (!player) return;
+
+            // Hide every held model, then show the one for the active slot.
+            for (const k in heldPivots) { heldPivots[k].removeFromParent(); heldPivots[k].visible = false; }
+            currentWeaponPivot = null;
+
+            const held = heldPivots[activeSlot];
+            const cfg = HELD_VIEW[activeSlot];
+            if (held && cfg) {
+                camera.add(held);
+                held.position.copy(cfg.pos);
+                held.rotation.copy(cfg.rot);
+                held.visible = true;
+                currentWeaponPivot = held;
+            }
+
+            // Flashlight cone is only on while the flashlight is equipped.
+            flashlight.intensity = (activeSlot === FLASHLIGHT_SLOT) ? 6 : 0;
+
+            refreshAmmoHud();
+        }
+
+        function toggleDebugBoxes() {
+            showHitboxes = !showHitboxes;
+            hitboxStatus.style.display = showHitboxes ? 'block' : 'none';
+
+            if (playerBoxHelper) playerBoxHelper.visible = showHitboxes;
+
+            entities.forEach(en => {
+                if(en.userData.helper) en.userData.helper.visible = showHitboxes;
+            });
+
+            for (const key in activeRooms) {
+                const chunk = activeRooms[key];
+                if (chunk.userData.debugHelper) chunk.userData.debugHelper.visible = showHitboxes;
+                else if (showHitboxes) {
+                    const h = new THREE.BoxHelper(chunk, 0x00ff00);
+                    scene.add(h); chunk.userData.debugHelper = h;
+                }
+            }
+        }
+        function toggleCoordReadout() {
+            showCoords = !showCoords;
+            coordInfo.style.display = showCoords ? 'block' : 'none';
+        }
+
+        // ===================================================================
+        //  M.E.G. TERMINALS — glowing notes scattered through the maze
+        // ===================================================================
+
+        // Cheap deterministic hash so a chunk's terminal is stable across reloads
+        function roomHash(x, z) {
+            let h = (x * 73856093) ^ (z * 19349663);
+            return h < 0 ? -h : h;
+        }
+        // ~45% of chunks hold a terminal (never the spawn chunk)
+        function roomHasTerminal(cx, cz) {
+            if (cx === 0 && cz === 0) return false;
+            return (roomHash(cx, cz) % 100) < 45;
+        }
+
+        // Pass `fixed = {key, x, z}` to place a terminal at an exact spot
+        // (used for the guaranteed starter terminal in front of spawn).
+        function buildTerminal(cx, cz, fixed) {
+            const key = fixed ? fixed.key : `${cx},${cz}`;
+            const used = readStations.has(key);
+
+            const group = new THREE.Group();
+            const screenMat = new THREE.MeshStandardMaterial({
+                color: 0x111100,
+                emissive: used ? 0x222222 : 0xc9b037,
+                emissiveIntensity: used ? 0.2 : 0.9
+            });
+            const screen = new THREE.Mesh(new THREE.BoxGeometry(1.2, 1.6, 0.18), screenMat);
+            screen.position.y = 1.5;
+            group.add(screen);
+
+            const stand = new THREE.Mesh(
+                new THREE.BoxGeometry(0.25, 1.5, 0.25),
+                new THREE.MeshStandardMaterial({ color: 0x2a2a18 })
+            );
+            stand.position.y = 0.75;
+            group.add(stand);
+
+            const glow = new THREE.PointLight(used ? 0x333333 : 0xffcc44, used ? 0.2 : 1.4, 9);
+            glow.position.y = 1.7;
+            group.add(glow);
+
+            if (fixed) {
+                group.position.set(fixed.x, 0, fixed.z);
+            } else {
+                // Stable position inside the room
+                const h = roomHash(cx, cz);
+                const ox = ((h % 1000) / 1000 - 0.5) * (ROOM_SIZE * 0.5);
+                const oz = (((h >> 5) % 1000) / 1000 - 0.5) * (ROOM_SIZE * 0.5);
+                group.position.set(cx * ROOM_SIZE + ox, 0, cz * ROOM_SIZE + oz);
+            }
+
+            group.userData.key = key;
+            group.userData.used = used;
+            group.userData.screenMat = screenMat;
+            group.userData.glow = glow;
+            return group;
+        }
+
+        function markTerminalRead(term) {
+            term.userData.used = true;
+            readStations.add(term.userData.key);
+            term.userData.screenMat.emissive.setHex(0x222222);
+            term.userData.screenMat.emissiveIntensity = 0.2;
+            term.userData.glow.color.setHex(0x333333);
+            term.userData.glow.intensity = 0.2;
+        }
+
+        function resetTerminals() {
+            noteStations.forEach(t => scene.remove(t));
+            noteStations.length = 0;
+            readStations.clear();
+            focusedNote = null;
+            interactPrompt.style.display = 'none';
+            if (exitDoor) { scene.remove(exitDoor); exitDoor = null; }
+        }
+
+        function drawQuestion(depth) {
+            const diff = depth < 2 ? 'easy' : depth < 4 ? 'medium' : 'hard';
+            let pool = QUIZ_BANK.filter(q => q.difficulty === diff && !usedQuestionIds.has(q.id));
+            if (pool.length === 0) pool = QUIZ_BANK.filter(q => !usedQuestionIds.has(q.id));
+            if (pool.length === 0) { usedQuestionIds.clear(); pool = QUIZ_BANK.slice(); }
+            return pool[Math.floor(Math.random() * pool.length)];
+        }
+
+        function openNote(term) {
+            isQuizOpen = true;
+            document.exitPointerLock();
+            interactPrompt.style.display = 'none';
+
+            const depth = Math.max(Math.abs(Math.round(player.position.x / ROOM_SIZE)),
+                                   Math.abs(Math.round(player.position.z / ROOM_SIZE)));
+            const q = drawQuestion(depth);
+            usedQuestionIds.add(q.id);
+
+            termMeta.innerText = `${q.category.toUpperCase()} · ${q.difficulty.toUpperCase()}`;
+            termQ.innerText = q.q;
+            termResult.innerHTML = '';
+            termContinue.style.display = 'none';
+            termOptions.innerHTML = '';
+
+            q.options.forEach((opt, idx) => {
+                const b = document.createElement('button');
+                b.className = 'term-opt';
+                b.innerText = opt;
+                b.onclick = () => answerNote(term, q, idx, b);
+                termOptions.appendChild(b);
+            });
+
+            terminalScreen.style.display = 'flex';
+        }
+
+        function answerNote(term, q, choice, btnEl) {
+            // Lock the buttons
+            const allBtns = termOptions.querySelectorAll('.term-opt');
+            allBtns.forEach((b, i) => {
+                b.disabled = true;
+                if (i === q.answer) b.classList.add('correct');
+            });
+
+            markTerminalRead(term);
+
+            if (choice === q.answer) {
+                adjustSanity(+25);
+                notesAnswered++;
+                refreshSignalHud();
+                termResult.innerHTML = `<b style="color:#8f8">SIGNAL CLEAN. +25 SANITY</b><br><span class="lore">${q.lore}</span>`;
+                if (notesAnswered >= NOTES_TO_ESCAPE && !exitDoor) {
+                    manifestExit();
+                    termResult.innerHTML += `<br><b style="color:#ffe14d">⚠ LEVEL KEY RESONATES — AN EXIT HAS MANIFESTED. FIND THE GOLD DOORWAY.</b>`;
+                }
+            } else {
+                btnEl.classList.add('wrong');
+                adjustSanity(-25);
+                termResult.innerHTML = `<b style="color:#f88">STATIC. -25 SANITY. Something shifts in the dark...</b><br><span class="lore">${q.lore}</span>`;
+                // The lights die and something gets closer
+                pointLight.intensity = 0.1;
+                if (entityAssets[activeEntityKind]) {
+                    const angle = Math.random() * Math.PI * 2;
+                    const d = 7 + Math.random() * 3;
+                    releaseEntity(player.position.x + Math.cos(angle) * d, player.position.z + Math.sin(angle) * d);
+                }
+            }
+
+            termContinue.style.display = 'block';
+        }
+
+        termContinue.onclick = () => {
+            terminalScreen.style.display = 'none';
+            isQuizOpen = false;
+            grabPointer();
+        };
+
+        function manifestExit() {
+            if (exitDoor) return;
+            const group = new THREE.Group();
+            const frameMat = new THREE.MeshStandardMaterial({ color: 0x000000, emissive: 0xffe14d, emissiveIntensity: 1.2 });
+            const door = new THREE.Mesh(new THREE.BoxGeometry(2.2, 3.6, 0.3), frameMat);
+            door.position.y = 1.8;
+            group.add(door);
+            const inner = new THREE.Mesh(
+                new THREE.PlaneGeometry(1.6, 3.0),
+                new THREE.MeshBasicMaterial({ color: 0xfff4b0 })
+            );
+            inner.position.set(0, 1.8, 0.18);
+            group.add(inner);
+            const glow = new THREE.PointLight(0xffe14d, 2.5, 20);
+            glow.position.y = 2;
+            group.add(glow);
+
+            // Place it a short walk ahead of the player
+            const ahead = new THREE.Vector3(0, 0, 1).applyAxisAngle(new THREE.Vector3(0,1,0), player.rotation.y);
+            group.position.copy(player.position).add(ahead.multiplyScalar(10));
+            group.position.y = 0;
+            scene.add(group);
+            exitDoor = group;
+        }
+
+        const loader = new GLTFLoader();
+
+        // Tileable weapon textures (loaded once, reused).
+        const texLoader = new THREE.TextureLoader();
+        const texCache = {};
+        function getTiledTex(path) {
+            if (!texCache[path]) {
+                const t = texLoader.load(path);
+                t.wrapS = t.wrapT = THREE.RepeatWrapping;
+                t.repeat.set(1, 1);
+                t.colorSpace = THREE.SRGBColorSpace;
+                texCache[path] = t;
+            }
+            return texCache[path];
+        }
+
+        loader.load('models/level0_map.glb', (gltf) => {
+            roomPrototype = gltf.scene;
+            roomPrototype.scale.set(1.3, 1.3, 1.3);
+            roomPrototype.traverse((child) => { if (child.isMesh) child.receiveShadow = true; });
+            streamRooms();
+        });
+
+        loader.load('models/player.glb', (gltf) => {
+            player = gltf.scene;
+            player.position.set(0, 0, 0);
+            if(gltf.animations.length > 0){
+                mixerPlayer = new THREE.AnimationMixer(player);
+                mixerPlayer.clipAction(gltf.animations[0]).play();
+            } else {
+                relaxArms(player);
+            }
+            playerBoxHelper = new THREE.BoxHelper(player, 0xffff00);
+            playerBoxHelper.visible = false;
+            scene.add(playerBoxHelper);
+
+            player.traverse(c => {
+                if (c.isSkinnedMesh) c.visible = isPlayerVisible;
+            });
+
+            scene.add(player);
+
+            mountWeapon();
+            onAssetLoaded();
+        });
+
+        loader.load('models/entity_bacteria.glb', (gltf) => {
+            const enemy = gltf.scene;
+            enemy.scale.set(0.5, 0.5, 0.5);
+            enemy.traverse((child) => { if (child.isMesh) child.material.color.set(0x000000); });
+            entityAssets['bacteria'] = gltf;
+
+            if(activeEntityKind === 'bacteria') entityProto = gltf;
+            onAssetLoaded();
+        });
+
+        // Only the Bacteria entity ships with the game; the other variants were
+        // removed to keep the upload small.
+
+        // First-person held weapon MODELS are disabled for now (no weapon .glb
+        // shipped). Combat still works via the crosshair, and the flashlight
+        // still casts light. Drop textured weapon .glb files back into
+        // HELD_VIEW + restore a loader here later to show held models again.
+
+        function onAssetLoaded() {
+            if (player && entityAssets['bacteria']) document.getElementById('status').innerText = "Ready to Noclip";
+        }
+
+        function relaxArms(model) {
+            model.traverse((child) => {
+                if (child.isBone) {
+                    const name = child.name;
+                    if (name.includes('LeftArm_')) { child.rotation.set(0,0,0); child.rotation.x = 1.4; child.rotation.z = 0.2; }
+                    if (name.includes('RightArm_')) { child.rotation.set(0,0,0); child.rotation.x = 1.4; child.rotation.z = -0.2; }
+                    if (name.includes('LeftForeArm_')) child.rotation.set(0,0,0);
+                    if (name.includes('RightForeArm_')) child.rotation.set(0,0,0);
+                }
+            });
+        }
+
+        function streamRooms() {
+            if (!player || !roomPrototype) return;
+            const pX = player.position.x; const pZ = player.position.z;
+            const chunkX = Math.round(pX / ROOM_SIZE); const chunkZ = Math.round(pZ / ROOM_SIZE);
+            const activeKeys = new Set();
+            for (let x = -1; x <= 1; x++) {
+                for (let z = -1; z <= 1; z++) {
+                    const cx = chunkX + x; const cz = chunkZ + z; const key = `${cx},${cz}`; activeKeys.add(key);
+                    if (!activeRooms[key]) {
+                        const clone = roomPrototype.clone();
+                        clone.position.set(cx * ROOM_SIZE, 0, cz * ROOM_SIZE);
+                        if (showHitboxes) { const h = new THREE.BoxHelper(clone, 0x00ff00); scene.add(h); clone.userData.debugHelper = h; }
+                        scene.add(clone); activeRooms[key] = clone;
+
+                        // Drop an M.E.G. terminal in this room if the layout calls for one
+                        if (roomHasTerminal(cx, cz)) {
+                            const term = buildTerminal(cx, cz);
+                            scene.add(term);
+                            noteStations.push(term);
+                            clone.userData.terminal = term;
+                        }
+                    }
+                }
+            }
+            for (const key in activeRooms) {
+                if (!activeKeys.has(key)) {
+                    const chunk = activeRooms[key];
+                    if (chunk.userData.debugHelper) scene.remove(chunk.userData.debugHelper);
+                    if (chunk.userData.terminal) {
+                        const t = chunk.userData.terminal;
+                        scene.remove(t);
+                        const idx = noteStations.indexOf(t);
+                        if (idx > -1) noteStations.splice(idx, 1);
+                        if (focusedNote === t) focusedNote = null;
+                    }
+                    scene.remove(chunk); delete activeRooms[key];
+                }
+            }
+        }
+
+        // Find the closest unread terminal in reach and show the prompt
+        function scanTerminals() {
+            if (!player || !isGameActive || isQuizOpen) { interactPrompt.style.display = 'none'; return; }
+            let best = null, bestDist = 5.0;
+            for (const t of noteStations) {
+                if (t.userData.used) continue;
+                const dx = t.position.x - player.position.x;
+                const dz = t.position.z - player.position.z;
+                const d = Math.hypot(dx, dz);
+                if (d < bestDist) { bestDist = d; best = t; }
+            }
+            focusedNote = best;
+            interactPrompt.style.display = best ? 'block' : 'none';
+        }
+
+        // Did the player reach the exit?
+        function checkExitTouch() {
+            if (!exitDoor || !player || isGameOver) return;
+            const d = Math.hypot(exitDoor.position.x - player.position.x,
+                                 exitDoor.position.z - player.position.z);
+            if (d < 2.2) endRunEscape();
+        }
+
+        function renderLoop() {
+            requestAnimationFrame(renderLoop);
+            const currentTime = performance.now();
+            const delta = clock.getDelta();
+
+            const weapon = ARSENAL[activeSlot];
+            if (isTriggerHeld && weapon && !isReloading && !isGameOver && isGameActive && !isQuizOpen) {
+                if (currentTime - lastShotTime >= weapon.rate) {
+                    fireShot();
+                }
+            }
+
+            // Apply buffered recoil (two axes)
+            const recoilSpeed = 6.0;
+            if (Math.abs(recoilBufferPitch) > 0.0001) {
+                const moveP = recoilBufferPitch * Math.min(delta * recoilSpeed, 1.0);
+                cameraPitch -= moveP;
+                recoilBufferPitch -= moveP;
+            }
+            if (Math.abs(recoilBufferYaw) > 0.0001) {
+                const moveY = recoilBufferYaw * Math.min(delta * recoilSpeed, 1.0);
+                player.rotation.y -= moveY;
+                recoilBufferYaw -= moveY;
+            }
+
+            // Pitch clamp
+            const limit = Math.PI / 2 - 0.1;
+            cameraPitch = Math.max(-limit, Math.min(limit, cameraPitch));
+
+            if (mixerPlayer && isGameActive) mixerPlayer.update(delta);
+
+            tickEntities(delta);
+
+            // Slow sanity drain from the endless hum
+            if (isGameActive && !isQuizOpen && !isCreativeMode && !isGameOver) {
+                adjustSanity(-delta * 0.6);
+            }
+            // Fog thickens as sanity drops
+            scene.fog.density = 0.05 + (1 - sanity / 100) * 0.06;
+
+            // Spin the exit portal so it's easy to spot
+            if (exitDoor) exitDoor.rotation.y += delta * 0.8;
+
+            if (playerBoxHelper) playerBoxHelper.update();
+
+            // Light dip of the held weapon while reloading.
+            if (isReloading && currentWeaponPivot) currentWeaponPivot.rotation.x = HELD_VIEW[activeSlot].rot.x - 0.25;
+
+            if (showCoords && player) {
+                coordInfo.innerText = `XYZ: ${player.position.x.toFixed(2)} / ${player.position.y.toFixed(2)} / ${player.position.z.toFixed(2)}`;
+            }
+
+            if (isGameOver) { renderer.render(scene, camera); return; }
+
+            if (player && isGameActive && !isQuizOpen) {
+                let speedMultiplier = 1.0;
+                let crouchOffset = 0;
+
+                if (isCreativeMode) {
+                    speedMultiplier = 3.0;
+                } else {
+                    if (keys.shift) {
+                        speedMultiplier *= 0.5;
+                        crouchOffset = CROUCH_DROP;
+                    } else if (keys.ctrl) {
+                        speedMultiplier *= 1.25;
+                    }
+                }
+
+                if (isReloading) speedMultiplier *= 0.75;
+
+                const currentSpeed = WALK_SPEED * speedMultiplier;
+
+                const forward = new THREE.Vector3(0, 0, 1).applyAxisAngle(new THREE.Vector3(0, 1, 0), player.rotation.y);
+                const right = new THREE.Vector3(1, 0, 0).applyAxisAngle(new THREE.Vector3(0, 1, 0), player.rotation.y);
+
+                let isMoving = false;
+                if (keys.w) { player.position.add(forward.clone().multiplyScalar(currentSpeed)); isMoving = true; }
+                if (keys.s) { player.position.add(forward.clone().multiplyScalar(-currentSpeed)); isMoving = true; }
+                if (keys.a) { player.position.add(right.clone().multiplyScalar(currentSpeed)); isMoving = true; }
+                if (keys.d) { player.position.add(right.clone().multiplyScalar(-currentSpeed)); isMoving = true; }
+
+                if (isMoving && isGrounded && !playerStepSound.isPlaying && soundEnabled && !isCreativeMode) {
+                    playerStepSound.play();
+                } else if ((!isMoving || !isGrounded || !soundEnabled || isCreativeMode) && playerStepSound.isPlaying) {
+                    playerStepSound.stop();
+                }
+
+                if (playerStepSound.isPlaying) {
+                    if (keys.ctrl) playerStepSound.setPlaybackRate(1.5);
+                    else if (keys.shift) playerStepSound.setPlaybackRate(0.8);
+                    else playerStepSound.setPlaybackRate(1.0);
+                }
+
+                if (isCreativeMode) {
+                    if (keys.space) player.position.y += currentSpeed;
+                    if (keys.shift) player.position.y -= currentSpeed;
+                    playerVelocityY = 0;
+                    isGrounded = false;
+                } else {
+                    if (keys.space && isGrounded) {
+                        playerVelocityY = JUMP_VEL;
+                        isGrounded = false;
+                    }
+
+                    playerVelocityY -= GRAV_ACCEL * delta;
+                    player.position.y += playerVelocityY * delta;
+
+                    if (player.position.y <= 0) {
+                        player.position.y = 0;
+                        playerVelocityY = 0;
+                        isGrounded = true;
+                    }
+                }
+
+                streamRooms();
+                scanTerminals();
+                checkExitTouch();
+                pointLight.position.copy(player.position);
+                pointLight.position.y += 2;
+
+                const config = VIEW_CONFIG[viewMode];
+
+                if (viewMode === 2) {
+                    player.visible = false;
+                } else {
+                    player.visible = true;
+                }
+
+                const targetPosition = player.position.clone();
+                targetPosition.y += config.height - crouchOffset;
+
+                const yaw = player.rotation.y + config.offsetAngle;
+                const pitch = cameraPitch;
+                const horizontalDist = config.dist * Math.cos(pitch);
+                const verticalDist = config.dist * Math.sin(pitch);
+                camera.position.x = targetPosition.x + horizontalDist * Math.sin(yaw);
+                camera.position.y = targetPosition.y + verticalDist;
+                camera.position.z = targetPosition.z + horizontalDist * Math.cos(yaw);
+                camera.lookAt(targetPosition);
+            }
+            renderer.render(scene, camera);
+        }
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        renderLoop();
+    </script>
+</body>
+</html>
