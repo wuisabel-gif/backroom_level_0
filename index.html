@@ -1795,8 +1795,9 @@
                 refreshBloodHud();
                 adjustSanity(-20);
                 pointLight.intensity = 0.1;
-                // it lunges off into the dark and starts hunting
-                if (entityAssets[activeEntityKind]) {
+                // it lunges off into the dark and starts hunting — but never before
+                // the 15s grace period is up (the grace timer will spawn it then)
+                if (entityAssets[activeEntityKind] && (performance.now() - startTime) >= MONSTER_GRACE_MS) {
                     const a = Math.random() * Math.PI * 2, d = 5 + Math.random() * 3;
                     releaseEntity(w.position.x + Math.cos(a) * d, w.position.z + Math.sin(a) * d);
                 }
@@ -1872,9 +1873,10 @@
                 btnEl.classList.add('wrong');
                 adjustSanity(-25);
                 termResult.innerHTML = `<b style="color:#f88">STATIC. -25 SANITY. Something shifts in the dark...</b><br><span class="lore">${q.lore}</span>`;
-                // The lights die and something gets closer
+                // The lights die and something gets closer — but never before the
+                // 15s grace period is up (the grace timer will spawn it then).
                 pointLight.intensity = 0.1;
-                if (entityAssets[activeEntityKind]) {
+                if (entityAssets[activeEntityKind] && (performance.now() - startTime) >= MONSTER_GRACE_MS) {
                     const angle = Math.random() * Math.PI * 2;
                     const d = 7 + Math.random() * 3;
                     releaseEntity(player.position.x + Math.cos(angle) * d, player.position.z + Math.sin(angle) * d);
