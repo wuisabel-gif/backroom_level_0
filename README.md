@@ -18,6 +18,8 @@ and then the internet did what the internet does and built a whole universe on t
 
 anyway. this is my little shrine to the thing. a door you can actually walk through. stand in the hum. watch the lights stutter. feel the carpet run off forever in every direction. remember exactly why those stupid empty yellow rooms got their hooks in you and never let go.
 
+and you're not alone down here. every so often you'll turn a corner and there's a person. another wanderer, just standing there, pacing a little. and here's the thing: you can't tell. walk up and you've got a choice to make, because it's a coin flip. maybe it's a survivor, and they'll mark the right answer on your next M.E.G. note like a guardian angel. or maybe it was never a person at all, maybe it's a Skin-Stealer wearing somebody's face, and it's going to lunge. you have to guess. that's the whole game, really. trust the stranger at your own risk.
+
 no engine. no launcher. no unity, no unreal. just three.js and html and javascript banged together by hand, because honestly the Backrooms SHOULD feel a little homemade and a little broken. reality with the collision turned off.
 
 ## step inside
