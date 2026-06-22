@@ -4,6 +4,12 @@
 >
 > *God save you if you hear something wandering around nearby, because it sure as hell has heard you.*
 
+### ▶ watch the gameplay
+
+[![the backrooms — level 0 gameplay](https://img.youtube.com/vi/mtCEmOLThiI/hqdefault.jpg)](https://www.youtube.com/watch?v=mtCEmOLThiI)
+
+*(click the thumbnail — [youtu.be/mtCEmOLThiI](https://www.youtube.com/watch?v=mtCEmOLThiI))*
+
 ok so listen. this place is not real and it lives in my head rent free anyway.
 
 it started as ONE photo. one blurry yellow room on 4chan, some carpet, lights buzzing, like four sentences of text. no monster. no plot. nothing. and somehow it wrecked everyone. because you KNOW that room. you have stood in that room. the school after everyone went home. the office on a sunday with the AC off. that one mall hallway behind the food court where the lights go bzzzzz and the air just. stops. you've been there. that is the whole horror of it. it is familiar and it is SO deeply wrong.
