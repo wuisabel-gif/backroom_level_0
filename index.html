@@ -358,6 +358,8 @@
         }
         .term-opt:hover { border-color: #c9b037; color: #fff; background: rgba(60,50,0,0.5); }
         .term-opt.correct { border-color: #4caf50; background: rgba(20,60,20,0.7); color: #cfc; }
+        .term-opt.hint { border-color: #5fcf7a; box-shadow: 0 0 12px rgba(95,207,122,0.6); }
+        .term-opt.hint::after { content: ' ◂ marked'; color: #5fcf7a; font-size: 12px; letter-spacing: 1px; }
         .term-opt.wrong { border-color: #f44; background: rgba(60,20,20,0.7); color: #fcc; }
         .term-opt:disabled { cursor: default; }
         .term-result { margin-top: 18px; font-size: 14px; line-height: 1.5; min-height: 20px; }
@@ -850,6 +852,14 @@
         let focusedNote = null;     // terminal the player can currently read
         let exitDoor = null;         // spawns when enough notes are logged
 
+        // --- Unknown wanderers: a survivor who helps... or a Skin-Stealer ---
+        const wanderers = [];           // live wanderer figures in the world
+        const usedWanderers = new Set();// chunk keys already approached
+        let focusedWanderer = null;     // wanderer the player can approach
+        let wandererHint = false;       // a survivor marks the answer on the next note
+        let wandererTemplate = null;    // the player.glb model, cloned for each wanderer
+        const WANDER_SPEED = 0.9;       // how fast a stranger paces around its spot
+
         const clock = new THREE.Clock();
         const keys = { w: false, a: false, s: false, d: false, f3: false, ctrl: false, space: false, shift: false };
         let cameraPitch = 0.0;
@@ -991,9 +1001,15 @@
             scene.add(starter);
             noteStations.push(starter);
 
-            // Opening hint so the quiz can't be missed.
+            // Guaranteed wanderer just off to the side of spawn, so you meet a
+            // stranger within a few seconds of starting.
+            const starterW = buildWanderer(0, 0, { key: 'starter-w', x: -1.8, z: 3.5 });
+            scene.add(starterW);
+            wanderers.push(starterW);
+
+            // Opening hint so the quiz (and the stranger) can't be missed.
             battleLog.style.color = '#ffe14d';
-            battleLog.innerText = 'Walk forward to the glowing M.E.G. terminal and press E to read it.';
+            battleLog.innerText = 'Ahead: a glowing M.E.G. terminal, and a stranger. Trust the stranger at your own risk.';
 
             if (bgmSound.buffer && soundEnabled) {
                 if (bgmSound.isPlaying) bgmSound.stop();
@@ -1444,10 +1460,10 @@
                 return;
             }
 
-            // E = read a nearby M.E.G. terminal
-            if ((e.key === 'e' || e.key === 'E') && isGameActive && focusedNote && !isQuizOpen) {
-                openNote(focusedNote);
-                return;
+            // E = read a nearby M.E.G. terminal, or approach a nearby wanderer
+            if ((e.key === 'e' || e.key === 'E') && isGameActive && !isQuizOpen) {
+                if (focusedNote) { openNote(focusedNote); return; }
+                if (focusedWanderer) { approachWanderer(focusedWanderer); return; }
             }
 
             if (e.key === 'F1') {
@@ -1654,6 +1670,141 @@
             focusedNote = null;
             interactPrompt.style.display = 'none';
             if (exitDoor) { scene.remove(exitDoor); exitDoor = null; }
+            // wanderers too
+            wanderers.forEach(w => scene.remove(w));
+            wanderers.length = 0;
+            usedWanderers.clear();
+            focusedWanderer = null;
+            wandererHint = false;
+        }
+
+        // ~15% of rooms hold a wanderer (never the spawn room, never a terminal room).
+        function roomHasWanderer(cx, cz) {
+            if (cx === 0 && cz === 0) return false;
+            const b = roomHash(cx, cz) % 100;
+            return b >= 55 && b < 70;
+        }
+
+        // A pale, silent figure just standing in the room. You can't tell from
+        // here whether it's a survivor or something wearing a survivor's skin.
+        function buildWanderer(cx, cz, fixed) {
+            const key = fixed ? fixed.key : `${cx},${cz}`;
+            const used = usedWanderers.has(key);
+            const group = new THREE.Group();
+            const mats = []; // materials we can recolor on approach
+
+            if (wandererTemplate) {
+                // A real human figure — a clone of the player model — standing still.
+                const fig = SkeletonUtils.clone(wandererTemplate.scene);
+                fig.visible = true; // the player model is hidden in FPS — force the clone visible
+                fig.traverse(c => {
+                    c.visible = true;
+                    if (c.isMesh) {
+                        c.material = c.material.clone();
+                        c.material.emissive = new THREE.Color(0x6a6a78);
+                        c.material.emissiveIntensity = used ? 0.1 : 0.35;
+                        c.frustumCulled = false;
+                        mats.push(c.material);
+                    }
+                });
+                group.add(fig);
+                // animate the model if it has a clip (legs move); otherwise relax the arms
+                if (wandererTemplate.animations && wandererTemplate.animations.length > 0) {
+                    const mixer = new THREE.AnimationMixer(fig);
+                    mixer.clipAction(wandererTemplate.animations[0]).play();
+                    group.userData.mixer = mixer;
+                } else {
+                    relaxArms(fig);
+                }
+            } else {
+                // Fallback (model not loaded yet): a pale silhouette.
+                const mat = new THREE.MeshStandardMaterial({ color: 0x15151a, emissive: 0xb9b9c8, emissiveIntensity: used ? 0.12 : 0.4 });
+                const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.34, 1.0, 4, 10), mat); body.position.y = 1.05; group.add(body);
+                const head = new THREE.Mesh(new THREE.SphereGeometry(0.27, 14, 14), mat); head.position.y = 1.85; group.add(head);
+                mats.push(mat);
+            }
+
+            const glow = new THREE.PointLight(0x9a9ab5, used ? 0.15 : 1.0, 8);
+            glow.position.y = 1.5; group.add(glow);
+
+            if (fixed) {
+                group.position.set(fixed.x, 0, fixed.z);
+            } else {
+                const h = roomHash(cx, cz);
+                const ox = (((h >> 3) % 1000) / 1000 - 0.5) * (ROOM_SIZE * 0.5);
+                const oz = (((h >> 9) % 1000) / 1000 - 0.5) * (ROOM_SIZE * 0.5);
+                group.position.set(cx * ROOM_SIZE + ox, 0, cz * ROOM_SIZE + oz);
+            }
+
+            group.userData.key = key;
+            group.userData.used = used;
+            group.userData.mats = mats;
+            group.userData.glow = glow;
+            group.userData.spawn = group.position.clone(); // roams around this point
+            group.userData.target = null;
+            group.userData.retarget = 0;
+            return group;
+        }
+
+        // Strangers slowly pace around their spawn point.
+        function updateWanderers(delta) {
+            for (const w of wanderers) {
+                if (w.userData.mixer) w.userData.mixer.update(delta);
+                if (w.userData.used) continue;
+                w.userData.retarget -= delta;
+                if (!w.userData.target || w.userData.retarget <= 0) {
+                    const a = Math.random() * Math.PI * 2, r = 1.5 + Math.random() * 3;
+                    w.userData.target = w.userData.spawn.clone().add(
+                        new THREE.Vector3(Math.cos(a) * r, 0, Math.sin(a) * r));
+                    w.userData.retarget = 2 + Math.random() * 3;
+                }
+                const t = w.userData.target;
+                const dx = t.x - w.position.x, dz = t.z - w.position.z;
+                const dist = Math.hypot(dx, dz);
+                if (dist > 0.15) {
+                    w.lookAt(t.x, w.position.y, t.z); // model's front (-Z) turns toward the target
+                    const step = Math.min(WANDER_SPEED * delta, dist);
+                    w.position.x += (dx / dist) * step;
+                    w.position.z += (dz / dist) * step;
+                }
+            }
+        }
+
+        // The gamble: 50/50 survivor or Skin-Stealer.
+        function approachWanderer(w) {
+            w.userData.used = true;
+            usedWanderers.add(w.userData.key);
+            focusedWanderer = null;
+            interactPrompt.style.display = 'none';
+
+            if (Math.random() < 0.5) {
+                // Survivor — marks the answer on your next note.
+                wandererHint = true;
+                adjustSanity(+10);
+                w.userData.mats.forEach(m => m.emissive.setHex(0x2f7a3a));
+                w.userData.glow.color.setHex(0x5fcf7a); w.userData.glow.intensity = 0.5;
+                battleLog.style.color = '#8f8';
+                battleLog.innerText = 'A survivor. They\'ll mark the truth on your next M.E.G. note.';
+            } else {
+                // Skin-Stealer — it was never human.
+                w.userData.mats.forEach(m => m.emissive.setHex(0x7a1010));
+                w.userData.glow.color.setHex(0xc02020); w.userData.glow.intensity = 0.9;
+                battleLog.style.color = 'red';
+                battleLog.innerText = 'IT WASN\'T HUMAN.';
+                playerHealth -= 35;
+                refreshBloodHud();
+                adjustSanity(-20);
+                pointLight.intensity = 0.1;
+                // it lunges off into the dark and starts hunting
+                if (entityAssets[activeEntityKind]) {
+                    const a = Math.random() * Math.PI * 2, d = 5 + Math.random() * 3;
+                    releaseEntity(w.position.x + Math.cos(a) * d, w.position.z + Math.sin(a) * d);
+                }
+                scene.remove(w);
+                const idx = wanderers.indexOf(w);
+                if (idx > -1) wanderers.splice(idx, 1);
+                if (playerHealth <= 0) endRunDeath();
+            }
         }
 
         function drawQuestion(depth) {
@@ -1687,6 +1838,13 @@
                 b.onclick = () => answerNote(term, q, idx, b);
                 termOptions.appendChild(b);
             });
+
+            // A survivor's hint marks the correct answer this once.
+            if (wandererHint) {
+                termOptions.children[q.answer].classList.add('hint');
+                termResult.innerHTML = '<span class="lore">The survivor\'s mark glows beside the truth.</span>';
+                wandererHint = false;
+            }
 
             terminalScreen.style.display = 'flex';
         }
@@ -1782,6 +1940,7 @@
 
         loader.load('models/player.glb', (gltf) => {
             player = gltf.scene;
+            wandererTemplate = gltf; // reused (cloned) as the body of each wanderer
             player.position.set(0, 0, 0);
             if(gltf.animations.length > 0){
                 mixerPlayer = new THREE.AnimationMixer(player);
@@ -1858,6 +2017,13 @@
                             noteStations.push(term);
                             clone.userData.terminal = term;
                         }
+                        // ...or an unknown wanderer
+                        if (roomHasWanderer(cx, cz)) {
+                            const w = buildWanderer(cx, cz);
+                            scene.add(w);
+                            wanderers.push(w);
+                            clone.userData.wanderer = w;
+                        }
                     }
                 }
             }
@@ -1872,24 +2038,49 @@
                         if (idx > -1) noteStations.splice(idx, 1);
                         if (focusedNote === t) focusedNote = null;
                     }
+                    if (chunk.userData.wanderer) {
+                        const w = chunk.userData.wanderer;
+                        scene.remove(w);
+                        const idx = wanderers.indexOf(w);
+                        if (idx > -1) wanderers.splice(idx, 1);
+                        if (focusedWanderer === w) focusedWanderer = null;
+                    }
                     scene.remove(chunk); delete activeRooms[key];
                 }
             }
         }
 
-        // Find the closest unread terminal in reach and show the prompt
+        // Find the closest interactable in reach (terminal or wanderer) and
+        // show the matching prompt.
         function scanTerminals() {
-            if (!player || !isGameActive || isQuizOpen) { interactPrompt.style.display = 'none'; return; }
-            let best = null, bestDist = 5.0;
+            if (!player || !isGameActive || isQuizOpen) {
+                interactPrompt.style.display = 'none'; focusedNote = null; focusedWanderer = null; return;
+            }
+            const px = player.position.x, pz = player.position.z;
+            let bestT = null, bestTd = 5.0;
             for (const t of noteStations) {
                 if (t.userData.used) continue;
-                const dx = t.position.x - player.position.x;
-                const dz = t.position.z - player.position.z;
-                const d = Math.hypot(dx, dz);
-                if (d < bestDist) { bestDist = d; best = t; }
+                const d = Math.hypot(t.position.x - px, t.position.z - pz);
+                if (d < bestTd) { bestTd = d; bestT = t; }
             }
-            focusedNote = best;
-            interactPrompt.style.display = best ? 'block' : 'none';
+            let bestW = null, bestWd = 4.0;
+            for (const w of wanderers) {
+                if (w.userData.used) continue;
+                const d = Math.hypot(w.position.x - px, w.position.z - pz);
+                if (d < bestWd) { bestWd = d; bestW = w; }
+            }
+            if (bestT && (!bestW || bestTd <= bestWd)) {
+                focusedNote = bestT; focusedWanderer = null;
+                interactPrompt.innerHTML = '[<span class="key">E</span>] READ M.E.G. NOTE';
+                interactPrompt.style.display = 'block';
+            } else if (bestW) {
+                focusedWanderer = bestW; focusedNote = null;
+                interactPrompt.innerHTML = '[<span class="key">E</span>] APPROACH THE STRANGER';
+                interactPrompt.style.display = 'block';
+            } else {
+                focusedNote = null; focusedWanderer = null;
+                interactPrompt.style.display = 'none';
+            }
         }
 
         // Did the player reach the exit?
@@ -2016,6 +2207,7 @@
                 }
 
                 streamRooms();
+                updateWanderers(delta);
                 scanTerminals();
                 checkExitTouch();
                 pointLight.position.copy(player.position);
