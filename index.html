@@ -535,6 +535,7 @@
     <script type="module">
         import * as THREE from 'three';
         import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+        import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
         import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 
         // --- Game settings ---
@@ -565,6 +566,7 @@
         let isInventoryOpen = false;
         let isCreativeMode = false;
         let isQuizOpen = false;         // an M.E.G. terminal is being read
+        const screenshotMode = new URLSearchParams(window.location.search).has('screenshot');
 
         // Entity bookkeeping
         const entityKinds = ['bacteria', 'nathan', 'rubeus', 'orcanos', 'donchan', 'skinstealer'];
@@ -592,15 +594,16 @@
         // --- Weapon data ---
         const ARSENAL = {
             1: {
-                name: "M16",
-                maxAmmo: 30,
+                name: "Colt M4",
+                maxAmmo: 45,
                 scale: 0.0012,
-                rate: 100,      // ms between shots (lower = faster)
+                rate: 85,      // ms between shots (lower = faster)
                 pellets: 1,
-                spreadHip: 0.08,
+                spreadHip: 0.055,
                 spreadAds: 0.001,
                 damage: 1,
-                recoil: 0.03,
+                recoil: 0.026,
+                range: 140,
                 tpsPos: new THREE.Vector3(0.08, -0.00, 0.40), tpsRot: new THREE.Euler(3.07, -2.50, 0.00),
                 fpsPosHip: new THREE.Vector3(0.25, -0.3, -0.6), fpsRotHip: new THREE.Euler(0, Math.PI + 0.05, 0),
                 fpsPosAds: new THREE.Vector3(0.0, -0.19, -0.5), fpsRotAds: new THREE.Euler(0, Math.PI, 0),
@@ -608,7 +611,7 @@
             },
             2: {
                 name: "Shotgun",
-                maxAmmo: 5,
+                maxAmmo: 8,
                 scale: 0.0012,
                 rate: 1000,
                 pellets: 8,
@@ -616,6 +619,7 @@
                 spreadAds: 0.05,
                 damage: 2,
                 recoil: 0.04,
+                range: 40,
                 tpsPos: new THREE.Vector3(0.08, -0.00, 0.40), tpsRot: new THREE.Euler(0, -2.50, Math.PI),
                 fpsPosHip: new THREE.Vector3(0.2, -0.3, -0.6), fpsRotHip: new THREE.Euler(Math.PI, Math.PI + 0.05, Math.PI),
                 fpsPosAds: new THREE.Vector3(0.0, -0.2, -0.5), fpsRotAds: new THREE.Euler(Math.PI, Math.PI, Math.PI),
@@ -623,20 +627,20 @@
             },
             3: {
                 name: "Pistol",
-                maxAmmo: 12,
+                maxAmmo: 18,
                 rate: 220,      // semi-auto sidearm
                 pellets: 1,
                 spreadHip: 0.04,
                 spreadAds: 0.001,
                 damage: 1,
                 recoil: 0.02,
-                noModel: true,  // no held .glb asset — hitscan only
+                range: 65,
                 shootSound: 'sounds/pistol_fire.mp3'
             }
         };
         const FLASHLIGHT_SLOT = 4; // slot 5 — a tool, not a gun
 
-        let magazines = { 1: 30, 2: 5, 3: 12 };
+        let magazines = { 1: 45, 2: 8, 3: 18 };
         let playerVelocityY = 0;
         let isGrounded = false;
         let isReloading = false;
@@ -829,14 +833,83 @@
         let currentWeaponPivot = null;
         // First-person held models, one per hotbar slot (loaded below).
         const heldPivots = {};
-        // The imported models are untextured, so each gets a tinted material:
-        // tint colour, metalness, roughness.
+        // First-person viewmodel setup. The P30L asset is used for the pistol
+        // slot and gets its supplied PBR texture maps below.
         const HELD_VIEW = {
-            0: { file: 'models/weapon_fist.glb',       targetSize: 0.26, pos: new THREE.Vector3(0.16, -0.24, -0.50), rot: new THREE.Euler(0, Math.PI / 2, 0), tex: 'models/texture/skin.png',       tint: 0xb07a52, metal: 0.0, rough: 0.8 },
-            1: { file: 'models/weapon_m16.glb',        targetSize: 0.55, pos: new THREE.Vector3(0.24, -0.28, -0.55), rot: new THREE.Euler(0, Math.PI / 2, 0), tex: 'models/texture/m16.png',        tint: 0x7a7a82, metal: 0.1, rough: 0.55 },
-            2: { file: 'models/weapon_shotgun.glb',    targetSize: 0.55, pos: new THREE.Vector3(0.24, -0.28, -0.55), rot: new THREE.Euler(0, Math.PI / 2, 0), tex: 'models/texture/shotgun.png',    tint: 0x95642f, metal: 0.1, rough: 0.55 },
-            3: { file: 'models/weapon_pistol.glb',     targetSize: 0.32, pos: new THREE.Vector3(0.20, -0.26, -0.50), rot: new THREE.Euler(0, Math.PI / 2, 0), tex: 'models/texture/m16.png',        tint: 0x73737c, metal: 0.1, rough: 0.55 },
-            4: { file: 'models/weapon_flashlight.glb', targetSize: 0.30, pos: new THREE.Vector3(0.20, -0.24, -0.50), rot: new THREE.Euler(0, Math.PI / 2, 0), tex: 'models/texture/flashlight.png', tint: 0x64646c, metal: 0.1, rough: 0.55 },
+            0: {
+                sprite: 'photo/fist.png',
+                spriteSize: new THREE.Vector2(0.20, 0.20),
+                pos: new THREE.Vector3(-0.16, -0.30, -0.48),
+                rot: new THREE.Euler(0, 0, 0)
+            },
+            1: {
+                file: 'Colt M4/uploads-files-5216919-M4Colt.glb',
+                targetSize: 0.72,
+                pos: new THREE.Vector3(-0.09, -0.32, -0.54),
+                rot: new THREE.Euler(-0.08, Math.PI / 2, 0.02),
+                materialMaps: {
+                    base: {
+                        baseColor: 'Colt M4/TexturesBlender4k/Base_BaseColor.png',
+                        normal: 'Colt M4/TexturesBlender4k/Base_Normal_OpenGL.png',
+                        metalness: 'Colt M4/TexturesBlender4k/Base_Metalness.png',
+                        roughness: 'Colt M4/TexturesBlender4k/Base_Roughness.png'
+                    },
+                    magazin: {
+                        baseColor: 'Colt M4/TexturesBlender4k/Magazin_BaseColor.png',
+                        normal: 'Colt M4/TexturesBlender4k/Magazin_Normal_OpenGL.png',
+                        metalness: 'Colt M4/TexturesBlender4k/Magazin_Metalness.png',
+                        roughness: 'Colt M4/TexturesBlender4k/Magazin_Roughness.png'
+                    },
+                    visier: {
+                        baseColor: 'Colt M4/TexturesBlender4k/Visier_BaseColor.png',
+                        normal: 'Colt M4/TexturesBlender4k/Visier_Normal_OpenGL.png',
+                        metalness: 'Colt M4/TexturesBlender4k/Visier_Metalness.png',
+                        roughness: 'Colt M4/TexturesBlender4k/Visier_Roughness.png'
+                    }
+                }
+            },
+            2: {
+                file: 'shotgun/Remington_model_M31.glb',
+                targetSize: 0.78,
+                pos: new THREE.Vector3(0.02, -0.32, -0.53),
+                rot: new THREE.Euler(-0.08, Math.PI, 0.02),
+                maps: {
+                    gun: {
+                        baseColor: 'shotgun/uploads-files-4654458-Textures/Remington_02/remington_02_BaseColor.png',
+                        normal: 'shotgun/uploads-files-4654458-Textures/Remington_02/remington_02_Normal.png',
+                        metalness: 'shotgun/uploads-files-4654458-Textures/Remington_02/remington_02_Metallic.png',
+                        roughness: 'shotgun/uploads-files-4654458-Textures/Remington_02/remington_02_Roughness.png',
+                        ao: 'shotgun/uploads-files-4654458-Textures/Remington_02/remington_ao.png'
+                    }
+                }
+            },
+            3: {
+                file: 'p30l/uploads-files-4189711-HK_P30L_(GLB).glb',
+                targetSize: 0.34,
+                pos: new THREE.Vector3(0.085, -0.29, -0.54),
+                rot: new THREE.Euler(-0.08, Math.PI, 0.02),
+                maps: {
+                    gun: {
+                        baseColor: 'p30l/Textures/HK_P30L_BaseColor.png',
+                        normal: 'p30l/Textures/HK_P30L_Normal_GL.png',
+                        metalness: 'p30l/Textures/HK_P30L_Metallic.png',
+                        roughness: 'p30l/Textures/HK_P30L_Roughness.png',
+                        ao: 'p30l/Textures/HK_P30L_AmbientOcclusion.png'
+                    },
+                    cartridge: {
+                        baseColor: 'p30l/Textures/cartridge_BaseColor.png',
+                        normal: 'p30l/Textures/cartridge_Normal_GL.png',
+                        metalness: 'p30l/Textures/cartridge_Metallic.png',
+                        roughness: 'p30l/Textures/cartridge_Roughness.png',
+                        ao: 'p30l/Textures/cartridge_AmbientOcclusion.png'
+                    }
+                }
+            },
+            4: {
+                primitive: 'flashlight',
+                pos: new THREE.Vector3(0.15, -0.29, -0.48),
+                rot: new THREE.Euler(0, 0, 0)
+            },
         };
         let mixerPlayer;
         let roomPrototype = null;
@@ -1267,6 +1340,11 @@
                 });
             } else {
                 isGameActive = false;
+                if (screenshotMode) {
+                    menuScreen.style.display = 'none';
+                    crosshair.style.display = 'block';
+                    return;
+                }
                 // Don't pop the menu if we're reading a note or in the inventory
                 if(!isInventoryOpen && !isGameOver && !isQuizOpen) {
                     menuScreen.style.display = 'flex';
@@ -1346,12 +1424,14 @@
             lastShotTime = now;
 
             const spreadBase = isAiming ? weapon.spreadAds : weapon.spreadHip;
+            const shotRange = weapon.range || 100;
 
             for (let i = 0; i < weapon.pellets; i++) {
                 const xOffset = (Math.random() - 0.5) * spreadBase;
                 const yOffset = (Math.random() - 0.5) * spreadBase;
 
                 raycaster.setFromCamera(new THREE.Vector2(xOffset, yOffset), camera);
+                raycaster.far = shotRange;
 
                 const aliveEnemies = entities.filter(e => !e.userData.dead);
                 const intersects = raycaster.intersectObjects(aliveEnemies, true);
@@ -1383,7 +1463,7 @@
                         }
                     }
                 } else {
-                    endPoint = raycaster.ray.at(100);
+                    endPoint = raycaster.ray.at(shotRange);
                 }
 
                 // Tracer originates from the camera (no held weapon model).
@@ -1918,19 +1998,207 @@
         }
 
         const loader = new GLTFLoader();
+        const fbxLoader = new FBXLoader();
 
         // Tileable weapon textures (loaded once, reused).
         const texLoader = new THREE.TextureLoader();
         const texCache = {};
-        function getTiledTex(path) {
+        function getTex(path, colorSpace = THREE.NoColorSpace) {
             if (!texCache[path]) {
                 const t = texLoader.load(path);
-                t.wrapS = t.wrapT = THREE.RepeatWrapping;
-                t.repeat.set(1, 1);
-                t.colorSpace = THREE.SRGBColorSpace;
+                t.colorSpace = colorSpace;
                 texCache[path] = t;
             }
             return texCache[path];
+        }
+
+        function buildPbrMaterial(maps) {
+            return new THREE.MeshStandardMaterial({
+                map: getTex(maps.baseColor, THREE.SRGBColorSpace),
+                normalMap: maps.normal ? getTex(maps.normal) : null,
+                metalnessMap: typeof maps.metalness === 'string' ? getTex(maps.metalness) : null,
+                roughnessMap: typeof maps.roughness === 'string' ? getTex(maps.roughness) : null,
+                aoMap: maps.ao ? getTex(maps.ao) : null,
+                metalness: typeof maps.metalness === 'number' ? maps.metalness : 1.0,
+                roughness: typeof maps.roughness === 'number' ? maps.roughness : 1.0
+            });
+        }
+
+        function fitViewmodel(model, targetSize) {
+            const box = new THREE.Box3().setFromObject(model);
+            const size = new THREE.Vector3();
+            box.getSize(size);
+            const longestSide = Math.max(size.x, size.y, size.z);
+            if (longestSide > 0) {
+                const scale = targetSize / longestSide;
+                model.scale.multiplyScalar(scale);
+            }
+
+            const fittedBox = new THREE.Box3().setFromObject(model);
+            const center = new THREE.Vector3();
+            fittedBox.getCenter(center);
+            model.position.sub(center);
+        }
+
+        function prepareHeldViewmodel(model, cfg) {
+            let namedMaterials = null;
+            if (cfg.materialMaps) {
+                namedMaterials = {};
+                Object.entries(cfg.materialMaps).forEach(([name, maps]) => {
+                    namedMaterials[name.toLowerCase()] = buildPbrMaterial(maps);
+                });
+            }
+
+            if (cfg.maps) {
+                const gunMaterial = buildPbrMaterial(cfg.maps.gun);
+                const cartridgeMaterial = cfg.maps.cartridge ? buildPbrMaterial(cfg.maps.cartridge) : gunMaterial;
+
+                model.traverse((child) => {
+                    if (!child.isMesh) return;
+
+                    if (child.geometry && child.geometry.attributes.uv && !child.geometry.attributes.uv2) {
+                        child.geometry.setAttribute('uv2', child.geometry.attributes.uv);
+                    }
+
+                    const names = [
+                        child.name,
+                        child.material && child.material.name,
+                        child.parent && child.parent.name
+                    ].join(' ').toLowerCase();
+
+                    const isLooseCartridge = names.includes('cartridge')
+                        || names.includes('magazine')
+                        || names.includes('mag_')
+                        || names.includes('mag ');
+                    child.visible = !isLooseCartridge;
+                    child.material = isLooseCartridge ? cartridgeMaterial.clone() : gunMaterial.clone();
+                    child.castShadow = true;
+                    child.receiveShadow = true;
+                });
+            }
+
+            if (namedMaterials) {
+                model.traverse((child) => {
+                    if (!child.isMesh) return;
+
+                    if (child.geometry && child.geometry.attributes.uv && !child.geometry.attributes.uv2) {
+                        child.geometry.setAttribute('uv2', child.geometry.attributes.uv);
+                    }
+
+                    const applyNamedMaterial = (material) => {
+                        const matName = (material && material.name ? material.name : '').toLowerCase();
+                        for (const key in namedMaterials) {
+                            if (matName.includes(key)) return namedMaterials[key].clone();
+                        }
+                        return namedMaterials.base ? namedMaterials.base.clone() : material;
+                    };
+
+                    child.material = Array.isArray(child.material)
+                        ? child.material.map(applyNamedMaterial)
+                        : applyNamedMaterial(child.material);
+                    child.castShadow = true;
+                    child.receiveShadow = true;
+                });
+            }
+
+            fitViewmodel(model, cfg.targetSize);
+        }
+
+        function buildFlashlightViewmodel() {
+            const group = new THREE.Group();
+            const bodyMat = new THREE.MeshStandardMaterial({
+                color: 0x222225,
+                metalness: 0.7,
+                roughness: 0.38
+            });
+            const gripMat = new THREE.MeshStandardMaterial({
+                color: 0x0d0d0f,
+                metalness: 0.45,
+                roughness: 0.62
+            });
+            const lensMat = new THREE.MeshStandardMaterial({
+                color: 0xffd36a,
+                emissive: 0xffbd45,
+                emissiveIntensity: 0.9,
+                metalness: 0.05,
+                roughness: 0.18
+            });
+
+            const body = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.05, 0.32, 24), bodyMat);
+            body.rotation.x = -Math.PI / 2;
+            group.add(body);
+
+            const head = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.055, 0.08, 24), bodyMat);
+            head.rotation.x = -Math.PI / 2;
+            head.position.z = -0.18;
+            group.add(head);
+
+            const lens = new THREE.Mesh(new THREE.CylinderGeometry(0.052, 0.052, 0.012, 24), lensMat);
+            lens.rotation.x = -Math.PI / 2;
+            lens.position.z = -0.225;
+            group.add(lens);
+
+            const grip = new THREE.Mesh(new THREE.CylinderGeometry(0.052, 0.052, 0.12, 16), gripMat);
+            grip.rotation.x = -Math.PI / 2;
+            grip.position.z = 0.08;
+            group.add(grip);
+
+            group.traverse((child) => {
+                if (child.isMesh) {
+                    child.castShadow = true;
+                    child.receiveShadow = true;
+                }
+            });
+
+            return group;
+        }
+
+        function loadHeldViewmodels() {
+            Object.entries(HELD_VIEW).forEach(([slot, cfg]) => {
+                if (cfg.primitive === 'flashlight') {
+                    const pivot = new THREE.Group();
+                    pivot.add(buildFlashlightViewmodel());
+                    pivot.visible = false;
+                    heldPivots[slot] = pivot;
+                    if (Number(slot) === activeSlot) mountWeapon();
+                    return;
+                }
+
+                if (cfg.sprite) {
+                    const pivot = new THREE.Group();
+                    const mat = new THREE.MeshBasicMaterial({
+                        map: getTex(cfg.sprite, THREE.SRGBColorSpace),
+                        transparent: true,
+                        depthTest: true,
+                        depthWrite: false
+                    });
+                    const mesh = new THREE.Mesh(
+                        new THREE.PlaneGeometry(cfg.spriteSize.x, cfg.spriteSize.y),
+                        mat
+                    );
+                    pivot.add(mesh);
+                    pivot.visible = false;
+                    heldPivots[slot] = pivot;
+                    if (Number(slot) === activeSlot) mountWeapon();
+                    return;
+                }
+
+                if (!cfg.file) return;
+
+                const modelLoader = cfg.file.toLowerCase().endsWith('.fbx') ? fbxLoader : loader;
+                modelLoader.load(cfg.file, (asset) => {
+                    const pivot = new THREE.Group();
+                    const model = asset.scene || asset;
+                    prepareHeldViewmodel(model, cfg);
+                    pivot.add(model);
+                    pivot.visible = false;
+                    heldPivots[slot] = pivot;
+
+                    if (Number(slot) === activeSlot) mountWeapon();
+                }, undefined, (err) => {
+                    console.warn(`Could not load held weapon model for slot ${slot}:`, err);
+                });
+            });
         }
 
         loader.load('models/level0_map.glb', (gltf) => {
@@ -1962,6 +2230,14 @@
 
             mountWeapon();
             onAssetLoaded();
+
+            if (screenshotMode && !hasGameStarted) {
+                beginRun();
+                isGameActive = true;
+                hasGameStarted = true;
+                menuScreen.style.display = 'none';
+                crosshair.style.display = 'block';
+            }
         });
 
         loader.load('models/entity_bacteria.glb', (gltf) => {
@@ -1977,10 +2253,7 @@
         // Only the Bacteria entity ships with the game; the other variants were
         // removed to keep the upload small.
 
-        // First-person held weapon MODELS are disabled for now (no weapon .glb
-        // shipped). Combat still works via the crosshair, and the flashlight
-        // still casts light. Drop textured weapon .glb files back into
-        // HELD_VIEW + restore a loader here later to show held models again.
+        loadHeldViewmodels();
 
         function onAssetLoaded() {
             if (player && entityAssets['bacteria']) document.getElementById('status').innerText = "Ready to Noclip";
